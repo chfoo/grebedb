@@ -1,0 +1,21 @@
+[package]
+name = "grebedb-tool"
+version = "0.1.0"
+authors = ["Christopher Foo <chris.foo@gmail.com>"]
+edition = "2018"
+description = "Command line tool for operating on GrebeDB databases"
+repository = "https://github.com/chfoo/grebedb/"
+license = "MPL-2.0"
+keywords = ["database", "key-value-store"]
+categories = ["command-line-utilities"]
+publish = false
+
+[dependencies.grebedb]
+path = "../library"
+
+[dependencies]
+anyhow = "1.0"
+clap = "2.33"
+data-encoding = "2.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

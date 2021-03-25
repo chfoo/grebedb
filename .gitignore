@@ -1,0 +1,6 @@
+## Rust output
+/target/
+/Cargo.lock
+
+## Visual Studio Code
+/.vscode/
