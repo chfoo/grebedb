@@ -17,7 +17,7 @@ const METADATA_COPY_FILENAME: &str = "grebedb_meta_copy.grebedb";
 pub type PageId = u64;
 pub type RevisionId = u64;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Page<T> {
     pub uuid: Uuid, // should match metadata
     pub id: PageId,
@@ -26,7 +26,7 @@ pub struct Page<T> {
     pub content: Option<T>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     pub uuid: Uuid, // uuid for the entire database
     pub revision: RevisionId,

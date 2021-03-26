@@ -32,13 +32,14 @@ pub mod vfs;
 
 use std::{
     fmt::Debug,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
 pub use crate::error::Error;
-use crate::page::{OpenMode, PageTableOptions};
-use crate::tree::{Tree, TreeCursor};
+use crate::format::Format;
+use crate::page::{Metadata, OpenMode, Page, PageTableOptions};
+use crate::tree::{Node, Tree, TreeCursor};
 use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs};
 
 /// Type alias for an owned key-value pair.
@@ -451,4 +452,24 @@ impl FlushTracker {
             false
         }
     }
+}
+
+/// Print the page contents for debugging purposes.
+pub fn debug_print_page(path: &Path) -> Result<(), Error> {
+    let mut format = Format::default();
+    let mut vfs = ReadOnlyVfs::new(Box::new(OsVfs::new(path.parent().unwrap())));
+
+    let filename = path.file_name().unwrap().to_str().unwrap();
+
+    if filename.contains("meta") {
+        let payload: Metadata = format.read_file(&mut vfs, filename)?;
+
+        eprintln!("{:?}", payload);
+    } else {
+        let payload: Page<Node> = format.read_file(&mut vfs, filename)?;
+
+        eprintln!("{:?}", payload);
+    }
+
+    Ok(())
 }

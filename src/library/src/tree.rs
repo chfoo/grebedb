@@ -10,7 +10,7 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum Node {
+pub enum Node {
     EmptyRoot,
     Internal(InternalNode),
     Leaf(LeafNode),
@@ -63,7 +63,7 @@ impl Node {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
-struct InternalNode {
+pub struct InternalNode {
     keys: Vec<Vec<u8>>,
     children: Vec<PageId>,
 }
@@ -179,7 +179,7 @@ impl Debug for InternalNode {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
-struct LeafNode {
+pub struct LeafNode {
     keys: Vec<Vec<u8>>,
     values: Vec<Vec<u8>>,
     next_leaf: Option<PageId>,
@@ -497,6 +497,8 @@ impl Tree {
         let mut page_queue = VecDeque::new();
 
         page_queue.push_back(page_id);
+
+        eprintln!("Root page: {}", page_id);
 
         while let Some(page_id) = page_queue.pop_front() {
             let node = self.read_node(page_id)?;
