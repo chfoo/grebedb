@@ -441,21 +441,7 @@ impl Tree {
         value_buffer: &mut Vec<u8>,
         range_end: &Option<Vec<u8>>,
     ) -> Result<bool, Error> {
-        if let Some(leaf_node) = &cursor.leaf_node {
-            if cursor.key_index >= leaf_node.len() {
-                match leaf_node.next_leaf() {
-                    Some(page_id) => {
-                        let next_leaf_node = self.read_node(page_id)?.leaf(page_id)?.clone();
-                        cursor.leaf_node = Some(next_leaf_node);
-                    }
-                    None => {
-                        cursor.leaf_node = None;
-                    }
-                }
-
-                cursor.key_index = 0;
-            }
-        }
+        self.cursor_load_next_leaf_node(cursor)?;
 
         if let Some(leaf_node) = &cursor.leaf_node {
             let (key, value) = leaf_node.get(cursor.key_index);
@@ -477,6 +463,29 @@ impl Tree {
         } else {
             Ok(false)
         }
+    }
+
+    fn cursor_load_next_leaf_node(&mut self, cursor: &mut TreeCursor) -> Result<(), Error> {
+        // Loop is required since leaf nodes are allowed to be empty.
+        while let Some(leaf_node) = &cursor.leaf_node {
+            if cursor.key_index >= leaf_node.len() {
+                cursor.key_index = 0;
+
+                match leaf_node.next_leaf() {
+                    Some(page_id) => {
+                        let next_leaf_node = self.read_node(page_id)?.leaf(page_id)?.clone();
+                        cursor.leaf_node = Some(next_leaf_node);
+                    }
+                    None => {
+                        cursor.leaf_node = None;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn flush(&mut self) -> Result<(), Error> {
