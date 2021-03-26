@@ -19,10 +19,9 @@ fn main() -> Result<(), grebedb::Error> {
         );
     }
 
-    println!("Printing all the key-values starting from key0004...");
+    println!("Printing all the key-values starting from [key:0004, key:0008) ...");
 
-    let mut cursor = db.cursor();
-    cursor.seek("key:0004")?;
+    let cursor = db.cursor_range(Some("key:0004"), Some("key:0008"))?;
 
     for (key, value) in cursor {
         println!(

@@ -250,6 +250,31 @@ impl Database {
         DatabaseCursor::new(&mut self.tree)
     }
 
+    /// Return a cursor for iterating all the key-value pairs within the given
+    /// range.
+    ///
+    /// This method is equivalent of obtaining a cursor and setting
+    /// [`DatabaseCursor::seek()`] and [`DatabaseCursor::set_range_end()`]
+    pub fn cursor_range<K1, K2>(
+        &mut self,
+        start: Option<K1>,
+        end: Option<K2>,
+    ) -> Result<DatabaseCursor<'_>, Error>
+    where
+        K1: AsRef<[u8]>,
+        K2: Into<Vec<u8>>,
+    {
+        let mut cursor = DatabaseCursor::new(&mut self.tree);
+
+        if let Some(start) = start {
+            cursor.seek(start)?;
+        }
+
+        cursor.set_range_end(end);
+
+        Ok(cursor)
+    }
+
     /// Persist all internally cached data to the file system.
     ///
     /// Calling this function ensures that all modifications cached in memory
@@ -304,6 +329,7 @@ pub struct DatabaseCursor<'a> {
     tree_cursor: TreeCursor,
     error: Option<Error>,
     has_seeked: bool,
+    range_end: Option<Vec<u8>>,
 }
 
 impl<'a> DatabaseCursor<'a> {
@@ -313,6 +339,7 @@ impl<'a> DatabaseCursor<'a> {
             tree_cursor: TreeCursor::default(),
             error: None,
             has_seeked: false,
+            range_end: None,
         }
     }
 
@@ -321,13 +348,27 @@ impl<'a> DatabaseCursor<'a> {
         self.error.as_ref()
     }
 
-    /// Reposition the cursor so the position is at or before the given key.
+    /// Reposition the cursor at or after the given key.
+    ///
+    /// In other words, the cursor will return key-value pairs that are equal
+    /// or greater than the given key.
     pub fn seek<K>(&mut self, key: K) -> Result<(), Error>
     where
         K: AsRef<[u8]>,
     {
         self.has_seeked = true;
         self.tree.cursor_start(&mut self.tree_cursor, key.as_ref())
+    }
+
+    /// Set the range of the cursor to those before the given key.
+    ///
+    /// In other words, the cursor will return key-value pairs that are less
+    /// than the given key.
+    pub fn set_range_end<K>(&mut self, key: Option<K>)
+    where
+        K: Into<Vec<u8>>,
+    {
+        self.range_end = key.map(|key| key.into());
     }
 
     /// Advance the cursor forward and write the key-value pair to the given buffer.
@@ -337,7 +378,10 @@ impl<'a> DatabaseCursor<'a> {
             self.tree.cursor_start(&mut self.tree_cursor, b"")?;
         }
 
-        if self.tree.cursor_next(&mut self.tree_cursor, key, value)? {
+        if self
+            .tree
+            .cursor_next(&mut self.tree_cursor, key, value, &self.range_end)?
+        {
             Ok(true)
         } else {
             Ok(false)

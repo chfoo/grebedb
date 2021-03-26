@@ -49,7 +49,7 @@ fn sequential_numbers(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
-fn cursor(mut database: Database) -> Result<(), Error> {
+fn cursor_sequential(mut database: Database) -> Result<(), Error> {
     for num in 0..10000 {
         let key = format!("{:08x}", num);
         let value = format!("hello world {}", num);
@@ -73,9 +73,39 @@ fn cursor(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
+fn cursor_range(mut database: Database) -> Result<(), Error> {
+    database.put("key:100", "hello world 100")?;
+    database.put("key:200", "hello world 200")?;
+    database.put("key:300", "hello world 300")?;
+    database.put("key:400", "hello world 400")?;
+    database.put("key:500", "hello world 500")?;
+    database.put("key:600", "hello world 600")?;
+    database.put("key:700", "hello world 700")?;
+    database.put("key:800", "hello world 800")?;
+
+    let cursor = database.cursor_range(Some("key:250"), Some("key:650"))?;
+    let keys: Vec<String> = cursor
+        .map(|(key, _value)| String::from_utf8(key).unwrap())
+        .collect();
+
+    assert_eq!(
+        keys,
+        vec![
+            "key:300".to_string(),
+            "key:400".to_string(),
+            "key:500".to_string(),
+            "key:600".to_string()
+        ]
+    );
+
+    Ok(())
+}
+
 multiple_vfs_test!(simple_get_put_remove);
 multiple_vfs_small_options_test!(simple_get_put_remove);
 multiple_vfs_test!(sequential_numbers);
 multiple_vfs_small_options_test!(sequential_numbers);
-multiple_vfs_test!(cursor);
-multiple_vfs_small_options_test!(cursor);
+multiple_vfs_test!(cursor_sequential);
+multiple_vfs_small_options_test!(cursor_sequential);
+multiple_vfs_test!(cursor_range);
+multiple_vfs_small_options_test!(cursor_range);

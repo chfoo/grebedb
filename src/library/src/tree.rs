@@ -439,6 +439,7 @@ impl Tree {
         cursor: &mut TreeCursor,
         key_buffer: &mut Vec<u8>,
         value_buffer: &mut Vec<u8>,
+        range_end: &Option<Vec<u8>>,
     ) -> Result<bool, Error> {
         if let Some(leaf_node) = &cursor.leaf_node {
             if cursor.key_index >= leaf_node.len() {
@@ -458,6 +459,12 @@ impl Tree {
 
         if let Some(leaf_node) = &cursor.leaf_node {
             let (key, value) = leaf_node.get(cursor.key_index);
+
+            if let Some(range_end) = range_end {
+                if key >= range_end {
+                    return Ok(false);
+                }
+            }
 
             cursor.key_index += 1;
 
@@ -506,7 +513,10 @@ impl Tree {
         key: &[u8],
         mut path: Option<&mut Vec<PageId>>,
     ) -> Result<Option<PageId>, Error> {
-        let mut page_id = self.page_table.root_id().unwrap();
+        let mut page_id = match self.page_table.root_id() {
+            Some(page_id) => page_id,
+            None => return Ok(None),
+        };
 
         for _ in 0..u16::MAX {
             let node = self.read_node(page_id)?;
