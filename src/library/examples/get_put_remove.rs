@@ -8,19 +8,19 @@ fn main() -> Result<(), grebedb::Error> {
     let mut db = grebedb::Database::open_path(path, options)?;
 
     // Store some key-values
-    db.put("key1", "hello world 1!")?;
-    db.put("key2", "hello world 2!")?;
-    db.put("key3", "hello world 3!")?;
+    db.put("key:1", "hello world 1!")?;
+    db.put("key:2", "hello world 2!")?;
+    db.put("key:3", "hello world 3!")?;
 
     // Getting some values
-    println!("The value of key1 is {:?}", db.get("key1")?);
-    println!("The value of key2 is {:?}", db.get("key2")?);
-    println!("The value of key3 is {:?}", db.get("key3")?);
+    println!("The value of key1 is {:?}", db.get("key:1")?);
+    println!("The value of key2 is {:?}", db.get("key:2")?);
+    println!("The value of key3 is {:?}", db.get("key:3")?);
 
     // Deleting a key-value
-    db.remove("key2")?;
+    db.remove("key:2")?;
 
-    println!("The value of key2 is {:?}", db.get("key2")?);
+    println!("The value of key2 is {:?}", db.get("key:2")?);
 
     // Data stored in internal cache is automatically written to the
     // file system when needed, but this only happens when a database

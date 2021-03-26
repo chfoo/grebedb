@@ -35,12 +35,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use page::{OpenMode, PageTableOptions};
-use tree::TreeCursor;
-
 pub use crate::error::Error;
-use crate::tree::Tree;
-use crate::vfs::{MemoryVfs, OsVfs, Vfs};
+use crate::page::{OpenMode, PageTableOptions};
+use crate::tree::{Tree, TreeCursor};
+use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs};
 
 /// Type alias for an owned key-value pair.
 pub type KeyValuePair = (Vec<u8>, Vec<u8>);
@@ -107,7 +105,7 @@ impl From<DatabaseOptions> for PageTableOptions {
 }
 
 /// Database open modes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DatabaseOpenMode {
     /// Open an existing database only if it exists.
     LoadOnly,
@@ -148,22 +146,27 @@ impl Database {
     pub fn open(vfs: Box<dyn Vfs + Send>, options: DatabaseOptions) -> Result<Self, Error> {
         options.validate()?;
 
-        let mut tree = Tree::open(
-            vfs,
-            options.clone().into(),
-            options.keys_per_node,
-        )?;
+        let vfs: Box<dyn Vfs + Send> = if options.open_mode == DatabaseOpenMode::ReadOnly {
+            Box::new(ReadOnlyVfs::new(vfs))
+        } else {
+            vfs
+        };
+
+        let mut tree = Tree::open(vfs, options.clone().into(), options.keys_per_node)?;
 
         match options.open_mode {
-            DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => tree.init_if_empty()?,
+            DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => {
+                tree.init_if_empty()?
+            }
             _ => {}
         }
 
-        let flush_tracker = if options.automatic_flush {
-            Some(FlushTracker::new(options.automatic_flush_threshold))
-        } else {
-            None
-        };
+        let flush_tracker =
+            if options.automatic_flush && options.open_mode != DatabaseOpenMode::ReadOnly {
+                Some(FlushTracker::new(options.automatic_flush_threshold))
+            } else {
+                None
+            };
 
         Ok(Self {
             options,
@@ -277,7 +280,7 @@ impl Database {
 
 impl Drop for Database {
     fn drop(&mut self) {
-        if self.options.automatic_flush {
+        if self.options.automatic_flush && self.options.open_mode != DatabaseOpenMode::ReadOnly {
             let _ = self.flush();
         }
     }

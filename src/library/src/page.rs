@@ -204,7 +204,7 @@ impl Default for PageTableOptions {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpenMode {
     LoadOnly,
     CreateOnly,
@@ -255,7 +255,7 @@ where
         };
 
         match options.open_mode {
-            OpenMode::LoadOnly => {
+            OpenMode::LoadOnly | OpenMode::ReadOnly => {
                 table.load_and_restore_metadata()?;
             }
             OpenMode::CreateOnly => {
@@ -267,9 +267,6 @@ where
                 } else {
                     table.save_new_metadata()?;
                 }
-            }
-            OpenMode::ReadOnly => {
-                todo!()
             }
         }
 
@@ -289,9 +286,7 @@ where
     }
 
     pub fn get(&mut self, page_id: PageId) -> Result<Option<&T>, Error> {
-        if self.closed {
-            return Err(Error::DatabaseClosed);
-        }
+        self.check_if_closed()?;
 
         self.get_(page_id)
     }
@@ -315,9 +310,8 @@ where
     }
 
     pub fn put(&mut self, page_id: PageId, content: T) -> Result<(), Error> {
-        if self.closed {
-            return Err(Error::DatabaseClosed);
-        }
+        self.check_if_closed()?;
+        self.check_if_read_only()?;
 
         let result = self.put_(page_id, content);
 
@@ -341,16 +335,17 @@ where
 
         if let Some((evicted_page_id, evicted_page)) = self.page_tracker.put_to_cache(page_id, page)
         {
-            self.save_evicted_page(evicted_page_id, evicted_page)?;
+            if self.options.open_mode != OpenMode::ReadOnly {
+                self.save_evicted_page(evicted_page_id, evicted_page)?;
+            }
         }
 
         Ok(())
     }
 
     pub fn update(&mut self, page_id: PageId) -> Result<Option<PageUpdateGuard<T>>, Error> {
-        if self.closed {
-            return Err(Error::DatabaseClosed);
-        }
+        self.check_if_closed()?;
+        self.check_if_read_only()?;
 
         self.update_(page_id)
     }
@@ -374,9 +369,8 @@ where
     }
 
     pub fn remove(&mut self, page_id: PageId) -> Result<(), Error> {
-        if self.closed {
-            return Err(Error::DatabaseClosed);
-        }
+        self.check_if_closed()?;
+        self.check_if_read_only()?;
 
         let result = self.remove_(page_id);
 
@@ -409,9 +403,8 @@ where
     }
 
     pub fn commit(&mut self) -> Result<(), Error> {
-        if self.closed {
-            return Err(Error::DatabaseClosed);
-        }
+        self.check_if_closed()?;
+        self.check_if_read_only()?;
 
         let result = self.commit_();
 
@@ -540,7 +533,9 @@ where
             if let Some((evicted_page_id, evicted_page)) =
                 self.page_tracker.put_to_cache(page_id, page)
             {
-                self.save_evicted_page(evicted_page_id, evicted_page)?;
+                if self.options.open_mode != OpenMode::ReadOnly {
+                    self.save_evicted_page(evicted_page_id, evicted_page)?;
+                }
             }
 
             Ok(true)
@@ -550,6 +545,8 @@ where
     }
 
     fn save_page(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
+        self.check_if_read_only()?;
+
         let path_1 = make_path(page_id, RevisionFlag::New);
         let path_1_temp = format!("{}.tmp", &path_1);
 
@@ -562,6 +559,8 @@ where
     }
 
     fn save_page_from_cache(&mut self, page_id: PageId) -> Result<(), Error> {
+        self.check_if_read_only()?;
+
         let path_1 = make_path(page_id, RevisionFlag::New);
         let path_1_temp = format!("{}.tmp", &path_1);
 
@@ -575,6 +574,8 @@ where
     }
 
     fn save_metadata(&mut self) -> Result<(), Error> {
+        self.check_if_read_only()?;
+
         let metadata = Metadata {
             uuid: self.uuid,
             revision: self.counter_tracker.revision(),
@@ -636,6 +637,10 @@ where
     }
 
     fn promote_page_filename(&mut self, page_id: PageId) -> Result<(), Error> {
+        if let OpenMode::ReadOnly = &self.options.open_mode {
+            return Err(Error::ReadOnly);
+        }
+
         let path_0 = make_path(page_id, RevisionFlag::Current);
         let path_1 = make_path(page_id, RevisionFlag::New);
 
@@ -649,7 +654,9 @@ where
         // 1. Pages that weren't tracked due to being evicted from cache
         // 2. Process crashed after writing metadata, but before all filenames
         //    were promoted
-        if page.revision >= self.counter_tracker.revision_on_persistence() {
+        if self.options.open_mode != OpenMode::ReadOnly
+            && page.revision >= self.counter_tracker.revision_on_persistence()
+        {
             self.promote_page_filename(page.id)?;
         }
 
@@ -666,6 +673,22 @@ where
         }
 
         Ok(())
+    }
+
+    fn check_if_closed(&self) -> Result<(), Error> {
+        if self.closed {
+            Err(Error::DatabaseClosed)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn check_if_read_only(&self) -> Result<(), Error> {
+        if let OpenMode::ReadOnly = &self.options.open_mode {
+            Err(Error::ReadOnly)
+        } else {
+            Ok(())
+        }
     }
 }
 

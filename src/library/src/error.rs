@@ -64,6 +64,10 @@ pub enum Error {
     #[error("database closed")]
     DatabaseClosed,
 
+    /// A modification to a database opened in read-only mode was requested.
+    #[error("database read only")]
+    ReadOnly,
+
     /// Other std IO error.
     #[error(transparent)]
     Io(#[from] std::io::Error),

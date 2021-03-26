@@ -77,7 +77,7 @@ impl Dumper {
         };
 
         let options = DatabaseOptions {
-            // open_mode: DatabaseOpenMode::ReadOnly,
+            open_mode: DatabaseOpenMode::ReadOnly,
             ..Default::default()
         };
         let database = Database::open_path(database_path, options)?;

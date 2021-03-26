@@ -4,7 +4,7 @@ fn main() -> Result<(), grebedb::Error> {
 
     for number in 0..10 {
         db.put(
-            format!("key{:04x}", number),
+            format!("key:{:04x}", number),
             format!("hello world {}!", number),
         )?;
     }
@@ -22,7 +22,7 @@ fn main() -> Result<(), grebedb::Error> {
     println!("Printing all the key-values starting from key0004...");
 
     let mut cursor = db.cursor();
-    cursor.seek("key0004")?;
+    cursor.seek("key:0004")?;
 
     for (key, value) in cursor {
         println!(

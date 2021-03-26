@@ -324,6 +324,73 @@ impl Vfs for OsVfs {
     }
 }
 
+/// Wrapper that allows only read operations.
+pub struct ReadOnlyVfs {
+    inner: Box<dyn Vfs + Send>,
+}
+
+impl ReadOnlyVfs {
+    /// Wrap a VFS.
+    pub fn new(inner: Box<dyn Vfs + Send>) -> Self {
+        Self { inner }
+    }
+
+    /// Return the wrapped VFS.
+    pub fn into_inner(self) -> Box<dyn Vfs + Send> {
+        self.inner
+    }
+}
+
+impl Vfs for ReadOnlyVfs {
+    fn lock(&mut self, path: &str) -> Result<(), Error> {
+        self.inner.lock(path)
+    }
+
+    fn unlock(&mut self, path: &str) -> Result<(), Error> {
+        self.inner.unlock(path)
+    }
+
+    fn read(&self, path: &str) -> Result<Vec<u8>, Error> {
+        self.inner.read(path)
+    }
+
+    fn write(&mut self, _path: &str, _data: &[u8]) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn write_and_sync_all(&mut self, _path: &str, _data: &[u8]) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn remove_file(&mut self, _path: &str) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn read_dir(&self, path: &str) -> Result<Vec<String>, Error> {
+        self.inner.read_dir(path)
+    }
+
+    fn create_dir(&mut self, _path: &str) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn remove_dir(&mut self, _path: &str) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn rename_file(&mut self, _old_path: &str, _new_path: &str) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn is_dir(&self, path: &str) -> Result<bool, Error> {
+        self.inner.is_dir(path)
+    }
+
+    fn exists(&self, path: &str) -> Result<bool, Error> {
+        self.inner.exists(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
