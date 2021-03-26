@@ -31,6 +31,7 @@ mod tree;
 pub mod vfs;
 
 use std::{
+    fmt::Debug,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -143,10 +144,10 @@ pub struct Database {
 
 impl Database {
     /// Open a database using the given virtual file system and options.
-    pub fn open(vfs: Box<dyn Vfs + Send>, options: DatabaseOptions) -> Result<Self, Error> {
+    pub fn open(vfs: Box<dyn Vfs + Sync + Send>, options: DatabaseOptions) -> Result<Self, Error> {
         options.validate()?;
 
-        let vfs: Box<dyn Vfs + Send> = if options.open_mode == DatabaseOpenMode::ReadOnly {
+        let vfs: Box<dyn Vfs + Sync + Send> = if options.open_mode == DatabaseOpenMode::ReadOnly {
             Box::new(ReadOnlyVfs::new(vfs))
         } else {
             vfs
@@ -291,6 +292,12 @@ impl Drop for Database {
     }
 }
 
+impl Debug for Database {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Database {{ open_mode: {:?} }}", self.options.open_mode)
+    }
+}
+
 /// Cursor for navigating key-value pairs in sorted order.
 pub struct DatabaseCursor<'a> {
     tree: &'a mut Tree,
@@ -358,6 +365,12 @@ impl<'a> Iterator for DatabaseCursor<'a> {
                 None
             }
         }
+    }
+}
+
+impl<'a> Debug for DatabaseCursor<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DatabaseCursor")
     }
 }
 

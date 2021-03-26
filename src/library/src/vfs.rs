@@ -1,6 +1,6 @@
 //! Virtual file system interface for database storage.
 
-use std::{collections::HashMap, io::Write, path::PathBuf};
+use std::{collections::HashMap, fmt::Debug, io::Write, path::PathBuf};
 
 use relative_path::{RelativePath, RelativePathBuf};
 use vfs::{MemoryFS, VfsFileType, VfsPath};
@@ -130,6 +130,12 @@ impl Default for MemoryVfs {
     }
 }
 
+impl Debug for MemoryVfs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MemoryVfs")
+    }
+}
+
 impl Vfs for MemoryVfs {
     fn lock(&mut self, _path: &str) -> Result<(), Error> {
         Ok(())
@@ -231,6 +237,12 @@ impl OsVfs {
     }
 }
 
+impl Debug for OsVfs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OsVfs {{ path: {:?} }}", &self.root)
+    }
+}
+
 impl Vfs for OsVfs {
     #[cfg(feature = "fslock")]
     fn lock(&mut self, path: &str) -> Result<(), Error> {
@@ -326,17 +338,17 @@ impl Vfs for OsVfs {
 
 /// Wrapper that allows only read operations.
 pub struct ReadOnlyVfs {
-    inner: Box<dyn Vfs + Send>,
+    inner: Box<dyn Vfs + Sync + Send>,
 }
 
 impl ReadOnlyVfs {
     /// Wrap a VFS.
-    pub fn new(inner: Box<dyn Vfs + Send>) -> Self {
+    pub fn new(inner: Box<dyn Vfs + Sync + Send>) -> Self {
         Self { inner }
     }
 
     /// Return the wrapped VFS.
-    pub fn into_inner(self) -> Box<dyn Vfs + Send> {
+    pub fn into_inner(self) -> Box<dyn Vfs + Sync + Send> {
         self.inner
     }
 }
@@ -388,6 +400,12 @@ impl Vfs for ReadOnlyVfs {
 
     fn exists(&self, path: &str) -> Result<bool, Error> {
         self.inner.exists(path)
+    }
+}
+
+impl Debug for ReadOnlyVfs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ReadOnlyVfs")
     }
 }
 

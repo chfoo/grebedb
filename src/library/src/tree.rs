@@ -320,7 +320,7 @@ pub struct Tree {
 
 impl Tree {
     pub fn open(
-        vfs: Box<dyn Vfs + Send>,
+        vfs: Box<dyn Vfs + Sync + Send>,
         page_table_options: PageTableOptions,
         keys_per_node: usize,
     ) -> Result<Self, Error> {

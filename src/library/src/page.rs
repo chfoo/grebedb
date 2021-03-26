@@ -223,7 +223,7 @@ where
     T: Serialize + DeserializeOwned,
 {
     options: PageTableOptions,
-    vfs: Box<dyn Vfs + Send>,
+    vfs: Box<dyn Vfs + Sync + Send>,
     format: Format,
     page_tracker: PageTracker<T>,
     counter_tracker: CounterTracker,
@@ -235,7 +235,7 @@ impl<T> PageTable<T>
 where
     T: Serialize + DeserializeOwned,
 {
-    pub fn open(mut vfs: Box<dyn Vfs + Send>, options: PageTableOptions) -> Result<Self, Error> {
+    pub fn open(mut vfs: Box<dyn Vfs + Sync + Send>, options: PageTableOptions) -> Result<Self, Error> {
         if options.file_locking {
             vfs.lock(LOCK_FILENAME)?;
         }
