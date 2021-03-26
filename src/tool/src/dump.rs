@@ -15,12 +15,11 @@ const NEWLINE: u8 = 0x0a;
 enum Row {
     Metadata(MetadataRow),
     KeyValue(KeyValueRow),
+    Eof,
 }
 
 #[derive(Default, Serialize, Deserialize)]
-struct MetadataRow {
-    pub kind: String,
-}
+struct MetadataRow {}
 
 #[derive(Default, Serialize, Deserialize)]
 struct KeyValueRow {
@@ -33,6 +32,9 @@ struct KeyValueRow {
     pub value: Vec<u8>,
 
     pub index: u64,
+
+    pub key_crc32c: u32,
+    pub value_crc32c: u32,
 }
 
 fn vec_to_hex<S>(vec: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -129,16 +131,11 @@ impl Dumper {
     }
 
     fn write_header(&mut self) -> anyhow::Result<()> {
-        let header_row = MetadataRow {
-            kind: "header".to_string(),
-        };
+        let header_row = MetadataRow {};
         self.write_row(Row::Metadata(header_row))
     }
     fn write_footer(&mut self) -> anyhow::Result<()> {
-        let footer_row = MetadataRow {
-            kind: "footer".to_string(),
-        };
-        self.write_row(Row::Metadata(footer_row))
+        self.write_row(Row::Eof)
     }
 
     fn write_key_values(&mut self) -> anyhow::Result<()> {
@@ -154,6 +151,8 @@ impl Dumper {
             }
 
             row.index = self.counter;
+            row.key_crc32c = crc32c::crc32c(&row.key);
+            row.value_crc32c = crc32c::crc32c(&row.value);
             self.counter += 1;
 
             self.write_row(Row::KeyValue(row))?;
@@ -224,11 +223,10 @@ impl Loader {
                     self.process_metadata(&row)?;
                 }
                 Row::KeyValue(row) => {
-                    if !self.header_found {
-                        return Err(anyhow::anyhow!("header not found"));
-                    }
-
-                    self.database.put(row.key, row.value)?;
+                    self.process_key_value_row(row)?;
+                }
+                Row::Eof => {
+                    self.process_eof_row()?;
                 }
             }
         }
@@ -257,20 +255,44 @@ impl Loader {
         }
     }
 
-    fn process_metadata(&mut self, row: &MetadataRow) -> anyhow::Result<()> {
-        if &row.kind == "header" {
-            if self.header_found {
-                return Err(anyhow::anyhow!("duplicate header"));
-            }
-
-            self.header_found = true;
-        } else if &row.kind == "footer" {
-            if self.footer_found {
-                return Err(anyhow::anyhow!("duplicate footer"));
-            }
-
-            self.footer_found = true;
+    fn process_metadata(&mut self, _row: &MetadataRow) -> anyhow::Result<()> {
+        if self.header_found {
+            return Err(anyhow::anyhow!("duplicate header"));
         }
+
+        self.header_found = true;
+
+        Ok(())
+    }
+
+    fn process_key_value_row(&mut self, row: KeyValueRow) -> anyhow::Result<()> {
+        if !self.header_found {
+            return Err(anyhow::anyhow!("header not found"));
+        }
+
+        let key_crc = crc32c::crc32c(&row.key);
+
+        if key_crc != row.key_crc32c {
+            return Err(anyhow::anyhow!("bad checksum, key, row = {}", row.index));
+        }
+
+        let value_crc = crc32c::crc32c(&row.value);
+
+        if value_crc != row.value_crc32c {
+            return Err(anyhow::anyhow!("bad checksum, value, row = {}", row.index));
+        }
+
+        self.database.put(row.key, row.value)?;
+
+        Ok(())
+    }
+
+    fn process_eof_row(&mut self) -> anyhow::Result<()> {
+        if self.footer_found {
+            return Err(anyhow::anyhow!("duplicate footer"));
+        }
+
+        self.footer_found = true;
 
         Ok(())
     }
