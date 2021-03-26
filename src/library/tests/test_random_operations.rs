@@ -138,12 +138,12 @@ impl OperationGenerator {
     }
 }
 
-fn rand_operation(mut database: Database) -> Result<(), Error> {
-    let mut generator = OperationGenerator::new(50000);
+fn rand_operation(mut database: Database, rounds:usize) -> Result<(), Error> {
+    let mut generator = OperationGenerator::new((rounds / 4).max(10));
     let mut std_map = BTreeMap::<Vec<u8>, Vec<u8>>::new();
     let mut value_buffer = Vec::new();
 
-    for _num in 0..100000 {
+    for _num in 0..rounds {
         match generator.get() {
             Operation::Get(key) => {
                 let has_key = database.get_buf(&key, &mut value_buffer)?;
@@ -199,4 +199,15 @@ fn rand_operation(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
-multiple_vfs_test!(rand_operation);
+fn rand_operation_20000(database: Database) -> Result<(), Error> {
+    rand_operation(database, 20000)
+}
+
+fn rand_operation_100000(database: Database) -> Result<(), Error> {
+    rand_operation(database, 100000)
+}
+
+multiple_vfs_test!(rand_operation_20000);
+
+multiple_vfs_test_ignore!(rand_operation_100000);
+
