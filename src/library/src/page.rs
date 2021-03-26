@@ -235,7 +235,10 @@ impl<T> PageTable<T>
 where
     T: Serialize + DeserializeOwned,
 {
-    pub fn open(mut vfs: Box<dyn Vfs + Sync + Send>, options: PageTableOptions) -> Result<Self, Error> {
+    pub fn open(
+        mut vfs: Box<dyn Vfs + Sync + Send>,
+        options: PageTableOptions,
+    ) -> Result<Self, Error> {
         if options.file_locking {
             vfs.lock(LOCK_FILENAME)?;
         }
@@ -508,7 +511,9 @@ where
 
                 return Ok(Some(page));
             }
-        } else if let Some(page) = page_0 {
+        }
+
+        if let Some(page) = page_0 {
             if page.revision <= self.counter_tracker.revision() {
                 return Ok(Some(page));
             } else {
@@ -518,6 +523,7 @@ where
                 });
             }
         }
+
         Ok(None)
     }
 
@@ -636,9 +642,7 @@ where
     }
 
     fn promote_page_filename(&mut self, page_id: PageId) -> Result<(), Error> {
-        if let OpenMode::ReadOnly = &self.options.open_mode {
-            return Err(Error::ReadOnly);
-        }
+        self.check_if_read_only()?;
 
         let path_0 = make_path(page_id, RevisionFlag::Current);
         let path_1 = make_path(page_id, RevisionFlag::New);
@@ -654,7 +658,7 @@ where
         // 2. Process crashed after writing metadata, but before all filenames
         //    were promoted
         if self.options.open_mode != OpenMode::ReadOnly
-            && page.revision >= self.counter_tracker.revision_on_persistence()
+            && page.revision <= self.counter_tracker.revision_on_persistence()
         {
             self.promote_page_filename(page.id)?;
         }

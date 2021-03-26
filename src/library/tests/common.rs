@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, Ordering},
     Arc,
 };
 
@@ -95,34 +95,25 @@ macro_rules! multiple_vfs_small_options_test {
 #[derive(Clone)]
 pub struct CrashingVfs {
     inner: MemoryVfs,
-    counter: Arc<AtomicUsize>,
-    threshold: Arc<AtomicUsize>,
+    pub metadata_rename_crash: Arc<AtomicBool>,
+    pub after_metadata_rename_crash: Arc<AtomicBool>,
+    metadata_found: Arc<AtomicBool>,
 }
 
 impl CrashingVfs {
     #[allow(dead_code)]
-    pub fn new(threshold: usize) -> Self {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
         Self {
             inner: MemoryVfs::default(),
-            counter: Arc::new(AtomicUsize::new(0)),
-            threshold: Arc::new(AtomicUsize::new(threshold)),
+            metadata_rename_crash: Arc::new(AtomicBool::new(false)),
+            after_metadata_rename_crash: Arc::new(AtomicBool::new(false)),
+            metadata_found: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    #[allow(dead_code)]
-    pub fn set_threshold(&self, value: usize) {
-        self.threshold.store(value, Ordering::Relaxed);
-    }
-
-    fn maybe_crash(&self) -> Result<(), grebedb::Error> {
-        if self.counter.load(Ordering::Relaxed) >= self.threshold.load(Ordering::Relaxed) {
-            Err(grebedb::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "crash",
-            )))
-        } else {
-            Ok(())
-        }
+    fn make_crash_error() -> grebedb::Error {
+        grebedb::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "crash"))
     }
 }
 
@@ -137,7 +128,6 @@ impl Vfs for CrashingVfs {
 
     fn read(&self, path: &str) -> Result<Vec<u8>, grebedb::Error> {
         eprintln!("read {}", path);
-        self.maybe_crash()?;
         self.inner.read(path)
     }
 
@@ -163,22 +153,31 @@ impl Vfs for CrashingVfs {
 
     fn create_dir(&mut self, path: &str) -> Result<(), grebedb::Error> {
         eprintln!("create_dir {}", path);
-        self.maybe_crash()?;
         self.inner.create_dir(path)
     }
 
     fn remove_dir(&mut self, path: &str) -> Result<(), grebedb::Error> {
         eprintln!("remove_dir {}", path);
-        self.maybe_crash()?;
         self.inner.remove_dir(path)
     }
 
     fn rename_file(&mut self, old_path: &str, new_path: &str) -> Result<(), grebedb::Error> {
         eprintln!("rename_file {} {}", old_path, new_path);
-        self.maybe_crash()?;
 
         if new_path == "grebedb_meta.grebedb" {
-            self.counter.fetch_add(1, Ordering::Relaxed);
+            if self.after_metadata_rename_crash.load(Ordering::Relaxed) {
+                self.metadata_found.store(true, Ordering::Relaxed);
+            }
+
+            if self.metadata_rename_crash.load(Ordering::Relaxed) {
+                eprintln!("crash on metadata rename");
+                return Err(Self::make_crash_error());
+            }
+        } else if self.after_metadata_rename_crash.load(Ordering::Relaxed)
+            && self.metadata_found.load(Ordering::Relaxed)
+        {
+            eprintln!("crash on after metadata rename");
+            return Err(Self::make_crash_error());
         }
 
         self.inner.rename_file(old_path, new_path)
@@ -190,7 +189,7 @@ impl Vfs for CrashingVfs {
     }
 
     fn exists(&self, path: &str) -> Result<bool, grebedb::Error> {
-        eprintln!("exists {}", path);
+        // eprintln!("exists {}", path);
         self.inner.exists(path)
     }
 }
