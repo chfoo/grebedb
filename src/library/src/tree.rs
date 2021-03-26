@@ -518,11 +518,11 @@ impl Tree {
                         path.push(page_id);
                     }
 
-                    assert_eq!(internal_node.verify(), None);
+                    debug_assert_eq!(internal_node.verify(), None);
                     page_id = internal_node.find_child(key);
                 }
                 Node::Leaf(leaf_node) => {
-                    assert_eq!(leaf_node.verify(), None);
+                    debug_assert_eq!(leaf_node.verify(), None);
 
                     return Ok(Some(page_id));
                 }

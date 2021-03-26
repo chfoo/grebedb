@@ -444,9 +444,8 @@ where
             &metadata.free_id_list,
         );
 
-        // METADATA_OLD_FILENAME is not read as a backup in case of failure
-        // because we don't know if it's consistent with the rest of the
-        // pages
+        // TODO: the copy backup file could be read if the main metadata file
+        // is unreadable
 
         Ok(())
     }
