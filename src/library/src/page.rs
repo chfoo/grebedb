@@ -676,7 +676,7 @@ where
 
     fn check_if_closed(&self) -> Result<(), Error> {
         if self.closed {
-            Err(Error::DatabaseClosed)
+            Err(Error::Closed)
         } else {
             Ok(())
         }

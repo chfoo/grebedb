@@ -62,7 +62,13 @@ pub enum Error {
     /// This occurs if the database experienced an error and will refuse to
     /// process future operations to prevent further corruption.
     #[error("database closed")]
-    DatabaseClosed,
+    Closed,
+
+    /// Database is locked.
+    ///
+    /// Another process has locked the database for reading/writing.
+    #[error("database locked")]
+    Locked,
 
     /// A modification to a database opened in read-only mode was requested.
     #[error("database read only")]

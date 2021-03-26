@@ -247,7 +247,9 @@ impl Vfs for OsVfs {
     #[cfg(feature = "fslock")]
     fn lock(&mut self, path: &str) -> Result<(), Error> {
         let mut lock = fslock::LockFile::open(self.root.join(path).as_path())?;
-        lock.try_lock()?;
+        if !lock.try_lock()? {
+            return Err(Error::Locked);
+        }
         self.locks.insert(self.root.join(path), lock);
 
         Ok(())
