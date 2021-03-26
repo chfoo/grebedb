@@ -74,5 +74,8 @@ fn cursor(mut database: Database) -> Result<(), Error> {
 }
 
 multiple_vfs_test!(simple_get_put_remove);
+multiple_vfs_small_options_test!(simple_get_put_remove);
 multiple_vfs_test!(sequential_numbers);
+multiple_vfs_small_options_test!(sequential_numbers);
 multiple_vfs_test!(cursor);
+multiple_vfs_small_options_test!(cursor);

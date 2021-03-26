@@ -70,7 +70,6 @@ Nodes are an externally tagged enum represented as one of:
 
 Internal nodes are a map with key-value pairs:
 
-* `parent` (u64, optional): Parent node page ID.
 * `keys` (array of binary): Keys in an B+ tree internal node.
 * `children` (array of u64): Array of child node page IDs.
 
@@ -78,6 +77,5 @@ Internal nodes are a map with key-value pairs:
 
 Leaf nodes are a map with key-value pairs:
 
-* `parent` (u64, optional): Parent node page ID.
 * `keys` (array of binary): Keys in a B+ tree leaf node.
 * `values` (array of binary): Contains the values.

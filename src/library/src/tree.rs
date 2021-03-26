@@ -1,3 +1,5 @@
+use std::{collections::VecDeque, fmt::Debug};
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -6,7 +8,7 @@ use crate::{
     vfs::Vfs,
 };
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Node {
     EmptyRoot,
@@ -62,7 +64,6 @@ impl Node {
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct InternalNode {
-    parent: Option<PageId>,
     keys: Vec<Vec<u8>>,
     children: Vec<PageId>,
 }
@@ -73,11 +74,7 @@ impl InternalNode {
         assert!(!keys.is_empty());
         assert!(is_sorted(&keys));
 
-        Self {
-            parent: None,
-            keys,
-            children,
-        }
+        Self { keys, children }
     }
 
     pub fn keys_len(&self) -> usize {
@@ -93,17 +90,8 @@ impl InternalNode {
         &self.keys
     }
 
-    #[cfg(test)]
     pub fn children(&self) -> &[PageId] {
         &self.children
-    }
-
-    pub fn parent(&self) -> Option<PageId> {
-        self.parent
-    }
-
-    pub fn set_parent(&mut self, value: Option<PageId>) {
-        self.parent = value;
     }
 
     pub fn verify(&self) -> Option<&'static str> {
@@ -160,7 +148,6 @@ impl InternalNode {
         assert!(adjacent_keys.len() + 1 == adjacent_children.len());
 
         let adjacent_node = InternalNode {
-            parent: self.parent,
             keys: adjacent_keys,
             children: adjacent_children,
         };
@@ -169,9 +156,30 @@ impl InternalNode {
     }
 }
 
+impl Debug for InternalNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{keys={} ", self.keys.len())?;
+
+        for index in 0..self.keys.len() {
+            write!(
+                f,
+                "({}) {:?} ",
+                self.children.get(index).unwrap_or(&PageId::MAX),
+                String::from_utf8_lossy(self.keys.get(index).unwrap_or(&Vec::new()))
+            )?;
+        }
+        write!(
+            f,
+            "({})",
+            self.children.get(self.keys.len()).unwrap_or(&PageId::MAX)
+        )?;
+
+        write!(f, " }}")
+    }
+}
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct LeafNode {
-    parent: Option<PageId>,
     keys: Vec<Vec<u8>>,
     values: Vec<Vec<u8>>,
     next_leaf: Option<PageId>,
@@ -185,7 +193,6 @@ impl LeafNode {
         assert!(is_sorted(&keys));
 
         Self {
-            parent: None,
             keys,
             values,
             next_leaf: None,
@@ -202,14 +209,6 @@ impl LeafNode {
 
     pub fn first_key(&self) -> Option<&[u8]> {
         self.keys.first().map(|item| item.as_slice())
-    }
-
-    pub fn parent(&self) -> Option<PageId> {
-        self.parent
-    }
-
-    pub fn set_parent(&mut self, value: Option<PageId>) {
-        self.parent = value
     }
 
     pub fn next_leaf(&self) -> Option<PageId> {
@@ -287,11 +286,30 @@ impl LeafNode {
         let num_keep = self.keys.len() / 2;
 
         LeafNode {
-            parent: self.parent,
             keys: self.keys.split_off(num_keep),
             values: self.values.split_off(num_keep),
             next_leaf: self.next_leaf,
         }
+    }
+}
+
+impl Debug for LeafNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{keys={} ", self.keys.len())?;
+
+        if let Some(next_leaf) = self.next_leaf {
+            write!(f, "next_leaf={:?} ", next_leaf)?;
+        }
+
+        for index in 0..self.keys.len() {
+            write!(
+                f,
+                "{:?},",
+                String::from_utf8_lossy(self.keys.get(index).unwrap_or(&Vec::new()))
+            )?;
+        }
+
+        write!(f, " }}")
     }
 }
 
@@ -327,7 +345,7 @@ impl Tree {
     }
 
     pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error> {
-        let page_id = match self.find_leaf_node(key)? {
+        let page_id = match self.find_leaf_node(key, None)? {
             Some(page_id) => page_id,
             None => return Ok(false),
         };
@@ -341,7 +359,7 @@ impl Tree {
     }
 
     pub fn get(&mut self, key: &[u8], value_destination: &mut Vec<u8>) -> Result<bool, Error> {
-        let page_id = match self.find_leaf_node(key)? {
+        let page_id = match self.find_leaf_node(key, None)? {
             Some(page_id) => page_id,
             None => return Ok(false),
         };
@@ -361,8 +379,9 @@ impl Tree {
 
     pub fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
         let keys_per_node = self.keys_per_node;
+        let mut node_path = Vec::new();
 
-        if let Some(page_id) = self.find_leaf_node(&key)? {
+        if let Some(page_id) = self.find_leaf_node(&key, Some(&mut node_path))? {
             let num_keys = {
                 let mut leaf_node_ = self.edit_node(page_id)?;
                 let leaf_node = leaf_node_.leaf_mut(page_id)?;
@@ -372,7 +391,7 @@ impl Tree {
             };
 
             if num_keys > keys_per_node {
-                self.split_leaf_node(page_id)?;
+                self.split_leaf_node(page_id, &mut node_path)?;
             }
         } else {
             self.add_new_root_leaf_node(key, value)?;
@@ -382,7 +401,7 @@ impl Tree {
     }
 
     pub fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
-        let page_id = match self.find_leaf_node(&key)? {
+        let page_id = match self.find_leaf_node(&key, None)? {
             Some(page_id) => page_id,
             None => return Ok(()),
         };
@@ -401,7 +420,7 @@ impl Tree {
     }
 
     pub fn cursor_start(&mut self, cursor: &mut TreeCursor, start_key: &[u8]) -> Result<(), Error> {
-        match self.find_leaf_node(start_key)? {
+        match self.find_leaf_node(start_key, None)? {
             Some(page_id) => {
                 let leaf_node = self.read_node(page_id)?.leaf(page_id)?.clone();
                 cursor.key_index = leaf_node.find_index(start_key);
@@ -457,7 +476,36 @@ impl Tree {
         self.page_table.commit()
     }
 
-    fn find_leaf_node(&mut self, key: &[u8]) -> Result<Option<PageId>, Error> {
+    pub fn dump_tree(&mut self) -> Result<(), Error> {
+        let page_id = self.page_table.root_id().unwrap();
+        let mut page_queue = VecDeque::new();
+
+        page_queue.push_back(page_id);
+
+        while let Some(page_id) = page_queue.pop_front() {
+            let node = self.read_node(page_id)?;
+
+            eprintln!("Page {}: {:?}", page_id, &node);
+
+            match node {
+                Node::EmptyRoot => {}
+                Node::Internal(internal_node) => {
+                    for page_id in internal_node.children() {
+                        page_queue.push_back(*page_id);
+                    }
+                }
+                Node::Leaf(_) => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn find_leaf_node(
+        &mut self,
+        key: &[u8],
+        mut path: Option<&mut Vec<PageId>>,
+    ) -> Result<Option<PageId>, Error> {
         let mut page_id = self.page_table.root_id().unwrap();
 
         for _ in 0..u16::MAX {
@@ -466,9 +514,18 @@ impl Tree {
             match node {
                 Node::EmptyRoot => return Ok(None),
                 Node::Internal(internal_node) => {
+                    if let Some(ref mut path) = path {
+                        path.push(page_id);
+                    }
+
+                    assert_eq!(internal_node.verify(), None);
                     page_id = internal_node.find_child(key);
                 }
-                Node::Leaf(_) => return Ok(Some(page_id)),
+                Node::Leaf(leaf_node) => {
+                    assert_eq!(leaf_node.verify(), None);
+
+                    return Ok(Some(page_id));
+                }
             }
         }
 
@@ -508,12 +565,16 @@ impl Tree {
         Ok(())
     }
 
-    fn split_leaf_node(&mut self, leaf_node_id: PageId) -> Result<(), Error> {
+    fn split_leaf_node(
+        &mut self,
+        leaf_node_id: PageId,
+        node_path: &mut Vec<PageId>,
+    ) -> Result<(), Error> {
         let adjacent_leaf_node_id = self.page_table.new_page_id();
 
         let mut leaf_node_ = self.edit_node(leaf_node_id)?;
         let leaf_node = leaf_node_.leaf_mut(leaf_node_id)?;
-        let parent_id = leaf_node.parent();
+
         let adjacent_leaf_node = leaf_node.split();
         let adjacent_leaf_first_key = adjacent_leaf_node.first_key().unwrap().to_vec();
 
@@ -524,15 +585,15 @@ impl Tree {
         self.page_table
             .put(adjacent_leaf_node_id, Node::Leaf(adjacent_leaf_node))?;
 
-        if let Some(parent_id) = parent_id {
-            let num_parent_node_keys = self.connect_leaf_to_parent(
+        if let Some(parent_id) = node_path.pop() {
+            let parent_key_len = self.connect_leaf_to_parent(
                 parent_id,
                 adjacent_leaf_first_key,
                 adjacent_leaf_node_id,
             )?;
 
-            if num_parent_node_keys > self.keys_per_node {
-                self.split_internal_node(parent_id)?;
+            if parent_key_len > self.keys_per_node {
+                self.split_internal_node(parent_id, node_path)?;
             }
         } else {
             self.make_parent_node_of_two_leaf_nodes(leaf_node_id, adjacent_leaf_node_id)?;
@@ -566,20 +627,6 @@ impl Tree {
         let parent_node_id = self.page_table.new_page_id();
         let parent_node = InternalNode::new(vec![key], vec![left_child_id, right_child_id]);
 
-        {
-            let mut left_child_ = self.edit_node(left_child_id)?;
-            let left_child = left_child_.leaf_mut(left_child_id)?;
-
-            left_child.set_parent(Some(parent_node_id));
-        }
-
-        {
-            let mut right_child_ = self.edit_node(right_child_id)?;
-            let right_child = right_child_.leaf_mut(right_child_id)?;
-
-            right_child.set_parent(Some(parent_node_id));
-        }
-
         self.page_table
             .put(parent_node_id, Node::Internal(parent_node))?;
         self.page_table.set_root_id(Some(parent_node_id));
@@ -587,14 +634,16 @@ impl Tree {
         Ok(())
     }
 
-    fn split_internal_node(&mut self, internal_node_id: PageId) -> Result<(), Error> {
-        let keys_per_node = self.keys_per_node;
+    fn split_internal_node(
+        &mut self,
+        internal_node_id: PageId,
+        node_path: &mut Vec<PageId>,
+    ) -> Result<(), Error> {
         let adjacent_internal_node_id = self.page_table.new_page_id();
 
         let mut internal_node_ = self.edit_node(internal_node_id)?;
         let internal_node = internal_node_.internal_mut(internal_node_id)?;
 
-        let parent_id = internal_node.parent();
         let (key, adjacent_internal_node) = internal_node.split();
 
         drop(internal_node_);
@@ -604,15 +653,15 @@ impl Tree {
             Node::Internal(adjacent_internal_node),
         )?;
 
-        if let Some(parent_id) = parent_id {
+        if let Some(parent_id) = node_path.pop() {
             let parent_key_len = self.reconnect_split_internal_node_to_parent(
                 parent_id,
                 key,
                 adjacent_internal_node_id,
             )?;
 
-            if parent_key_len > keys_per_node {
-                self.split_internal_node(parent_id)?;
+            if parent_key_len > self.keys_per_node {
+                self.split_internal_node(parent_id, node_path)?;
             }
         } else {
             self.make_parent_node_of_two_nodes(key, internal_node_id, adjacent_internal_node_id)?;
@@ -642,20 +691,6 @@ impl Tree {
     ) -> Result<(), Error> {
         let parent_node = InternalNode::new(vec![parent_key], vec![left_child_id, right_child_id]);
         let parent_node_id = self.page_table.new_page_id();
-
-        {
-            let mut left_child_ = self.edit_node(left_child_id)?;
-            let left_child = left_child_.leaf_mut(left_child_id)?;
-
-            left_child.set_parent(Some(parent_node_id));
-        }
-
-        {
-            let mut right_child_ = self.edit_node(right_child_id)?;
-            let right_child = right_child_.leaf_mut(right_child_id)?;
-
-            right_child.set_parent(Some(parent_node_id));
-        }
 
         self.page_table
             .put(parent_node_id, Node::Internal(parent_node))?;
@@ -710,14 +745,12 @@ mod tests {
             vec![b"key1".to_vec(), b"key2".to_vec(), b"key3".to_vec()],
             vec![b"value1".to_vec(), b"value2".to_vec(), b"value3".to_vec()],
         );
-        node.set_parent(Some(123));
         node.set_next_leaf(Some(456));
 
         let adjacent_node = node.split();
 
         assert_eq!(node.len(), 1);
         assert_eq!(adjacent_node.len(), 2);
-        assert_eq!(adjacent_node.parent(), Some(123));
 
         assert_eq!(node.first_key(), Some(&b"key1"[..]));
         assert_eq!(adjacent_node.first_key(), Some(&b"key2"[..]));

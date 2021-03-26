@@ -263,6 +263,11 @@ impl Database {
         self.tree.flush()
     }
 
+    /// Print the tree for debugging purposes.
+    pub fn debug_print_tree(&mut self) -> Result<(), Error> {
+        self.tree.dump_tree()
+    }
+
     fn maybe_flush(&mut self, increment: bool) -> Result<(), Error> {
         if let Some(flush_tracker) = &mut self.flush_tracker {
             if increment {
