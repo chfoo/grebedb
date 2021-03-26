@@ -4,3 +4,6 @@
 
 ## Visual Studio Code
 /.vscode/
+
+## Data from example programs
+/grebedb_example_data/

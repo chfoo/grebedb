@@ -1,0 +1,53 @@
+// Sample program that inserts and removes key-values like a deque.
+
+use std::time::{Duration, SystemTime};
+
+use rand::{Rng, RngCore, SeedableRng};
+use rand_xorshift::XorShiftRng;
+
+
+fn main() -> Result<(), grebedb::Error> {
+    let path = std::path::PathBuf::from("grebedb_example_data/queue_simulator/");
+
+    std::fs::create_dir_all(&path)?;
+
+    let options = grebedb::DatabaseOptions::default();
+    let mut db = grebedb::Database::open_path(path, options)?;
+
+    let mut counter = 0u64;
+
+    loop {
+        let mut rng = XorShiftRng::seed_from_u64(counter);
+
+        for _ in 0..rng.gen_range(50..150) {
+            let duration = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+            let ms = duration.as_micros() as u64;
+            let key = format!("{:016x}{:016x}", ms, counter);
+
+            let mut rng = XorShiftRng::seed_from_u64(counter);
+            let mut buffer = vec![0u8; 1024];
+            rng.fill_bytes(&mut buffer);
+
+            db.put(key, buffer)?;
+
+            counter += 1;
+        }
+
+        let mut keys_to_remove = Vec::new();
+        let mut cursor = db.cursor();
+
+        for _ in 0..100 {
+            if let Some((key, _value)) = cursor.next() {
+                keys_to_remove.push(key);
+            } else {
+                break;
+            }
+        }
+
+        for key in keys_to_remove {
+            db.remove(key)?;
+        }
+
+        std::thread::sleep(Duration::from_secs_f32(0.5))
+    }
+}

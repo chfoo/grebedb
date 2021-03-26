@@ -1,11 +1,15 @@
+// Demonstrates key-value operations.
+
+use grebedb::{Database, DatabaseOptions};
+
 fn main() -> Result<(), grebedb::Error> {
     // A directory is used to store a GrebeDB database.
     let path = std::path::PathBuf::from("grebedb_example_data/get_put_remove/");
 
     std::fs::create_dir_all(&path)?;
 
-    let options = grebedb::DatabaseOptions::default();
-    let mut db = grebedb::Database::open_path(path, options)?;
+    let options = DatabaseOptions::default();
+    let mut db = Database::open_path(path, options)?;
 
     // Store some key-values
     db.put("key:1", "hello world 1!")?;
@@ -16,6 +20,11 @@ fn main() -> Result<(), grebedb::Error> {
     println!("The value of key1 is {:?}", db.get("key:1")?);
     println!("The value of key2 is {:?}", db.get("key:2")?);
     println!("The value of key3 is {:?}", db.get("key:3")?);
+
+    // Overwrite the value
+    db.put("key:2", "new value")?;
+
+    println!("The value of key2 is {:?}", db.get("key:2")?);
 
     // Deleting a key-value
     db.remove("key:2")?;
