@@ -17,7 +17,7 @@ pub enum Node {
 }
 
 impl Node {
-    fn internal(&self, page_id: PageId) -> Result<&InternalNode, Error> {
+    fn _internal(&self, page_id: PageId) -> Result<&InternalNode, Error> {
         if let Self::Internal(internal_node) = self {
             Ok(internal_node)
         } else {
@@ -81,7 +81,7 @@ impl InternalNode {
         self.keys.len()
     }
 
-    pub fn _keys_is_empty(&self) -> bool {
+    pub fn keys_is_empty(&self) -> bool {
         self.keys.is_empty()
     }
 
@@ -95,9 +95,11 @@ impl InternalNode {
     }
 
     pub fn verify(&self) -> Option<&'static str> {
-        if self.keys.is_empty() || self.children.is_empty() {
-            Some("empty key or children")
-        } else if self.keys.len() + 1 != self.children.len() {
+        // Empty is allowed for lazy deletion
+        // if self.keys.is_empty() || self.children.is_empty() {
+        //     Some("empty key or children")
+        // } else
+        if self.keys.len() + 1 != self.children.len() {
             Some("key children length mismatch")
         } else if !is_sorted(&self.keys) {
             Some("keys not sorted")
@@ -111,7 +113,7 @@ impl InternalNode {
     }
 
     pub fn find_child(&self, key: &[u8]) -> PageId {
-        assert!(self.keys.len() + 1 == self.children.len());
+        debug_assert!(self.keys.len() + 1 == self.children.len());
 
         match self.search(key) {
             Ok(index) => self.children[index + 1],
@@ -153,6 +155,35 @@ impl InternalNode {
         };
 
         (new_parent_key, adjacent_node)
+    }
+
+    pub fn remove_child(&mut self, child_id: PageId) -> (Option<PageId>, Option<PageId>) {
+        debug_assert!(self.keys.len() + 1 == self.children.len());
+
+        let child_index = self.children.iter().position(|&id| id == child_id).unwrap();
+        let key_index = child_index;
+
+        assert_eq!(self.children.get(child_index).cloned(), Some(child_id));
+
+        let left_page_id = if child_index == 0 {
+            None
+        } else {
+            self.children.get(child_index - 1).cloned()
+        };
+        let right_page_id = self.children.get(child_index + 1).cloned();
+
+        if child_index == self.children.len() - 1 {
+            // If the child is the last, then remove the last key instead of
+            // the non-existent lessor key
+            self.keys.remove(key_index - 1);
+            self.children.remove(child_index);
+        } else {
+            // Remove the key that is greater
+            self.keys.remove(key_index);
+            self.children.remove(child_index);
+        }
+
+        (left_page_id, right_page_id)
     }
 }
 
@@ -203,7 +234,7 @@ impl LeafNode {
         self.keys.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn _is_empty(&self) -> bool {
         self.keys.is_empty()
     }
 
@@ -220,6 +251,7 @@ impl LeafNode {
     }
 
     pub fn verify(&self) -> Option<&'static str> {
+        // Empty is allowed for lazy deletion
         // if self.keys.is_empty() || self.values.is_empty() {
         //     Some("empty keys or values")
         // } else
@@ -237,7 +269,7 @@ impl LeafNode {
     }
 
     pub fn find_value(&self, key: &[u8]) -> Option<&[u8]> {
-        assert!(self.keys.len() == self.values.len());
+        debug_assert!(self.keys.len() == self.values.len());
 
         match self.search(key) {
             Ok(index) => Some(&self.values[index]),
@@ -246,7 +278,7 @@ impl LeafNode {
     }
 
     pub fn find_index(&self, key: &[u8]) -> usize {
-        assert!(self.keys.len() == self.values.len());
+        debug_assert!(self.keys.len() == self.values.len());
 
         match self.search(key) {
             Ok(index) => index,
@@ -316,7 +348,7 @@ impl Debug for LeafNode {
 pub struct Tree {
     page_table: PageTable<Node>,
     keys_per_node: usize,
-    remove_empty_nodes: bool,
+    edit_on_remove: bool,
 }
 
 impl Tree {
@@ -324,14 +356,14 @@ impl Tree {
         vfs: Box<dyn Vfs + Sync + Send>,
         page_table_options: PageTableOptions,
         keys_per_node: usize,
-        remove_empty_nodes: bool,
+        edit_on_remove: bool,
     ) -> Result<Self, Error> {
         assert!(keys_per_node >= 2);
 
         Ok(Self {
             page_table: PageTable::open(vfs, page_table_options)?,
             keys_per_node,
-            remove_empty_nodes,
+            edit_on_remove,
         })
     }
 
@@ -404,7 +436,9 @@ impl Tree {
     }
 
     pub fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
-        let page_id = match self.find_leaf_node(&key, None)? {
+        let mut node_path = Vec::new();
+
+        let page_id = match self.find_leaf_node(&key, Some(&mut node_path))? {
             Some(page_id) => page_id,
             None => return Ok(()),
         };
@@ -417,10 +451,16 @@ impl Tree {
             leaf_node.len()
         };
 
-        if self.remove_empty_nodes {
-            // TODO: remove empty nodes
-        }
+        if num_keys == 0 && self.edit_on_remove {
+            self.remove_leaf_node(page_id, &mut node_path)?;
 
+            // At this point, lazy deletion has occurred. But the invariants
+            // of a traditional B+ tree is invalidated and the tree is
+            // not balanced.
+
+            // TODO: an operation that traverses the tree to rebalence itself
+            // could be done here
+        }
 
         Ok(())
     }
@@ -472,7 +512,7 @@ impl Tree {
     }
 
     fn cursor_load_next_leaf_node(&mut self, cursor: &mut TreeCursor) -> Result<(), Error> {
-        // Loop is required since leaf nodes are allowed to be empty.
+        // Loop to find a non-empty leaf node is required since leaf nodes are allowed to be empty.
         while let Some(leaf_node) = &cursor.leaf_node {
             if cursor.key_index >= leaf_node.len() {
                 cursor.key_index = 0;
@@ -525,6 +565,9 @@ impl Tree {
         Ok(())
     }
 
+    // Find a leaf node
+    //
+    // Path is the list of parents to the leaf node. Path won't include the leaf.
     fn find_leaf_node(
         &mut self,
         key: &[u8],
@@ -581,8 +624,29 @@ impl Tree {
         }
     }
 
+    fn check_root_node_is_empty(&mut self) -> Result<(), Error> {
+        let root_id = self.page_table.root_id().unwrap();
+        let node = self.read_node(root_id)?;
+
+        if let Node::EmptyRoot = node {
+            Ok(())
+        } else {
+            Err(Error::InvalidPageData {
+                page: root_id,
+                message: "not root node",
+            })
+        }
+    }
+
+    // Set up a empty tree to have the root node as a leaf node.
     fn add_new_root_leaf_node(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
-        let page_id = self.page_table.new_page_id();
+        self.check_root_node_is_empty()?;
+
+        let page_id = self
+            .page_table
+            .root_id()
+            .unwrap_or_else(|| self.page_table.new_page_id());
+
         let mut leaf_node = LeafNode::default();
         leaf_node.insert(key, value);
 
@@ -592,6 +656,7 @@ impl Tree {
         Ok(())
     }
 
+    // Split a leaf node into two, creating a new parent if needed
     fn split_leaf_node(
         &mut self,
         leaf_node_id: PageId,
@@ -643,6 +708,9 @@ impl Tree {
         Ok(parent_node.keys_len())
     }
 
+    // Make an internal node that is a parent of two leaf nodes.
+    // Called when the root is a leaf node that has become split, and a internal
+    // node is the new root.
     fn make_parent_node_of_two_leaf_nodes(
         &mut self,
         left_child_id: PageId,
@@ -661,6 +729,7 @@ impl Tree {
         Ok(())
     }
 
+    // Split internal node, promoting a key into a parent level
     fn split_internal_node(
         &mut self,
         internal_node_id: PageId,
@@ -710,6 +779,8 @@ impl Tree {
         Ok(parent_node.keys_len())
     }
 
+    // Make a new internal node become the root.
+    // Called when the previous root internal node was newly split.
     fn make_parent_node_of_two_nodes(
         &mut self,
         parent_key: Vec<u8>,
@@ -722,6 +793,83 @@ impl Tree {
         self.page_table
             .put(parent_node_id, Node::Internal(parent_node))?;
         self.page_table.set_root_id(Some(parent_node_id));
+
+        Ok(())
+    }
+
+    fn remove_leaf_node(
+        &mut self,
+        leaf_node_id: PageId,
+        node_path: &mut Vec<PageId>,
+    ) -> Result<(), Error> {
+        if let Some(parent_id) = node_path.pop() {
+            // When the leaf node is a child of an internal node
+            let adjacent_leafs =
+                self.remove_child_from_internal_node(parent_id, leaf_node_id, node_path)?;
+            self.join_leaf_nodes(adjacent_leafs.0, adjacent_leafs.1)?;
+            self.page_table.remove(leaf_node_id)?;
+        } else {
+            // When the leaf node was also the root node
+            assert_eq!(self.page_table.root_id(), Some(leaf_node_id));
+            self.page_table.put(leaf_node_id, Node::EmptyRoot)?;
+        }
+
+        Ok(())
+    }
+
+    fn remove_child_from_internal_node(
+        &mut self,
+        internal_node_id: PageId,
+        child_node_id: PageId,
+        node_path: &mut Vec<PageId>,
+    ) -> Result<(Option<PageId>, Option<PageId>), Error> {
+        let mut internal_node_ = self.edit_node(internal_node_id)?;
+        let internal_node = internal_node_.internal_mut(internal_node_id)?;
+
+        if internal_node.keys_is_empty() {
+            // The current internal node simply points to a single child node.
+            // In this case, we can delete the node.
+            let first_child_id = internal_node.children().first().cloned().unwrap();
+
+            drop(internal_node_);
+
+            assert_eq!(first_child_id, child_node_id);
+
+            if let Some(parent_id) = node_path.pop() {
+                // Tell the parent to remove us, then delete
+                self.remove_child_from_internal_node(parent_id, internal_node_id, node_path)?;
+                self.page_table.remove(internal_node_id)?;
+            } else {
+                // We're the root, so replace it with empty root node
+                assert_eq!(self.page_table.root_id(), Some(internal_node_id));
+                self.page_table.put(internal_node_id, Node::EmptyRoot)?;
+            }
+
+            Ok((None, None))
+        } else {
+            // Lazy remove the child node, allowing underflow (traditional B+tree invariants violated)
+            let adjacent_nodes = internal_node.remove_child(child_node_id);
+            Ok(adjacent_nodes)
+        }
+    }
+
+    fn join_leaf_nodes(
+        &mut self,
+        left_leaf_id: Option<PageId>,
+        right_leaf_id: Option<PageId>,
+    ) -> Result<(), Error> {
+        if let Some(left_leaf_id) = left_leaf_id {
+            // { [...] , left , current , right, [...] } => {  [...] , left , right, [...] }
+            // { [...] , left , current } => { [...] , left }
+            let mut left_leaf_ = self.edit_node(left_leaf_id)?;
+            let left_leaf = left_leaf_.leaf_mut(left_leaf_id)?;
+
+            left_leaf.set_next_leaf(right_leaf_id);
+        }
+
+        // Other cases:
+        // { current , right, [...] } => { right, [...] }
+        // { current } => { }  (removal of leaf that is also root node)
 
         Ok(())
     }
@@ -840,5 +988,34 @@ mod tests {
 
         assert_eq!(adjacent_node.keys(), vec![b"key300", b"key400"]);
         assert_eq!(adjacent_node.children(), vec![12, 16, 20]);
+    }
+
+    #[test]
+    fn test_internal_node_remove_child() {
+        let mut node = InternalNode::new(
+            vec![b"key100".to_vec(), b"key200".to_vec(), b"key300".to_vec()],
+            vec![4, 8, 12, 16],
+        );
+
+        let (left_id, right_id) = node.remove_child(12);
+        //  key100  key300
+        // 4      8       16
+        assert_eq!(left_id, Some(8));
+        assert_eq!(right_id, Some(16));
+
+        let (left_id, right_id) = node.remove_child(16);
+        //  key100
+        // 4      8
+        assert_eq!(left_id, Some(8));
+        assert_eq!(right_id, None);
+
+        let (left_id, right_id) = node.remove_child(4);
+        //   [_]
+        //       8
+        assert_eq!(left_id, None);
+        assert_eq!(right_id, Some(8));
+
+        assert!(node.keys_is_empty());
+        assert_eq!(node.children().len(), 1);
     }
 }

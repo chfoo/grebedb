@@ -75,9 +75,9 @@ macro_rules! multiple_config_test {
 
         multiple_vfs_test!(
             $fn_name,
-            "remove_empty_nodes",
+            "edit_tree_on_remove",
             grebedb::DatabaseOptions {
-                remove_empty_nodes: false,
+                edit_tree_on_remove: false,
                 ..Default::default()
             },
             $ignore

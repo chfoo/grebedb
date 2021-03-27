@@ -10,7 +10,10 @@ Note: The library is *not* production-ready.
 
 Since there are too many key-value stores, the design of the database is immediately described upfront for you to decide whether GrebeDB is fit for your use:
 
-* The database is implemented as a B+ tree with each node saved to a file. Both keys and values are treated as binary data. Keys with prefixes are not optimized. Values are stored inline with the leaf nodes.
+* The database is implemented as a B+ tree with each node saved to a file.
+  * Both keys and values are treated as binary data. Keys with prefixes are not optimized.
+  * Values are stored inline with the leaf nodes.
+  * Lazy deletion is performed.
 * The size of each file is not fixed and can vary significantly depending on the data stored and configuration options.
 * Files are stored using a virtual file system interface. The implementation can be in memory, on a real disk, or your own implementation. Performance and durability is dependent on the file system.
 * Operations such as `get`, `put`, `remove`, and `cursor` are provided. There's no support for transactions, but each operation themselves are atomic. Consistency is provided by file copy-on-writes, incrementing revision counters, and atomic file renames.
@@ -56,7 +59,7 @@ The database uses an internal cache and automatically delays writing data to the
 db.flush()?;
 ```
 
-For more information, check the src/library/examples directory in the source code repository and the [API reference on docs.rs](https://docs.rs/grebedb).
+For more information, check the [src/library/examples](src/library/examples) directory in the source code repository and the [API reference on docs.rs](https://docs.rs/grebedb).
 
 ### Features
 

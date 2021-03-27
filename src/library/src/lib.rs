@@ -57,18 +57,18 @@ pub struct DatabaseOptions {
     /// the tree is rebalanced.
     pub keys_per_node: usize,
 
-    /// Whether to remove empty nodes from the tree. Default: true
+    /// Whether removal of key-values manipulates the tree. Default: true
     ///
-    /// When this option is true, empty nodes are unlinked up towards the
-    /// root tree node and its associated pages are marked as free for reuse.
+    /// When this option is true, the nodes in the tree may be changed
+    /// and unused pages are marked as free for reuse.
     /// This is recommended if your application regularly removes keys in
-    /// a sequential manner to rebalance the tree and reuse pages.
+    /// a sequential manner. This option avoids many unused files.
     ///
-    /// When this option is false, empty nodes remain in the tree and the
-    /// tree remains unbalanced. This behavior may improve performance by
-    /// disabling the tree cleanup manipulations, if your application rarely
-    /// removes key-value pairs.
-    pub remove_empty_nodes: bool,
+    /// When this option is false, empty leaf nodes remain and the internal
+    /// nodes of the tree are untouched. This behavior may improve performance
+    /// by skipping tree manipulations if your application rarely removes
+    /// key-value pairs.
+    pub edit_tree_on_remove: bool,
 
     /// Number of pages held in memory cache. Default: 64.
     pub page_cache_size: usize,
@@ -103,7 +103,7 @@ impl Default for DatabaseOptions {
         Self {
             open_mode: DatabaseOpenMode::default(),
             keys_per_node: 1024,
-            remove_empty_nodes: true,
+            edit_tree_on_remove: true,
             page_cache_size: 64,
             file_locking: true,
             automatic_flush: true,
@@ -191,7 +191,7 @@ impl Database {
             vfs,
             options.clone().into(),
             options.keys_per_node,
-            options.remove_empty_nodes,
+            options.edit_tree_on_remove,
         )?;
 
         match options.open_mode {
