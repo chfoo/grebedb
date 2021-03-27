@@ -76,9 +76,6 @@ fn cursor_range(mut database: Database) -> Result<(), Error> {
 }
 
 
-multiple_vfs_test!(cursor_sequential);
-multiple_vfs_small_options_test!(cursor_sequential);
-multiple_vfs_test!(cursor_range);
-multiple_vfs_small_options_test!(cursor_range);
-multiple_vfs_test!(cursor_removed_items);
-multiple_vfs_small_options_test!(cursor_removed_items);
+matrix_test!(cursor_sequential);
+matrix_test!(cursor_range);
+matrix_test!(cursor_removed_items);

@@ -15,21 +15,37 @@ pub fn make_tempdir() -> TempDir {
 }
 
 #[macro_export]
+macro_rules! matrix_test {
+    ($fn_name:ident) => {
+        multiple_config_test!($fn_name, cfg(test));
+    };
+}
+
+#[macro_export]
+macro_rules! matrix_test_ignore {
+    ($fn_name:ident) => {
+        multiple_config_test!($fn_name, ignore);
+    };
+}
+
+#[macro_export]
 macro_rules! multiple_vfs_test {
-    ($fn_name:ident) => {
+    ($fn_name:ident, $option_name:expr, $options:expr, $ignore:meta) => {
         paste::paste! {
             #[test]
-            fn [<test_memory_ $fn_name>]() {
-                let db = grebedb::Database::open_memory(grebedb::DatabaseOptions::default()).unwrap();
+            #[$ignore]
+            fn [<test_ $fn_name _memory_ $option_name>]() {
+                let db = grebedb::Database::open_memory($options).unwrap();
                 $fn_name(db).unwrap();
             }
         }
 
         paste::paste! {
             #[test]
-            fn [<test_disk_ $fn_name>]() {
+            #[$ignore]
+            fn [<test_ $fn_name _disk_ $option_name>]() {
                 let temp_dir = $crate::common::make_tempdir();
-                let db = grebedb::Database::open_path(temp_dir.path(), grebedb::DatabaseOptions::default()).unwrap();
+                let db = grebedb::Database::open_path(temp_dir.path(), $options).unwrap();
                 $fn_name(db).unwrap();
             }
         }
@@ -37,58 +53,35 @@ macro_rules! multiple_vfs_test {
 }
 
 #[macro_export]
-macro_rules! multiple_vfs_test_ignore {
-    ($fn_name:ident) => {
-        paste::paste! {
-            #[test]
-            #[ignore]
-            fn [<test_memory_ $fn_name>]() {
-                let db = grebedb::Database::open_memory(grebedb::DatabaseOptions::default()).unwrap();
-                $fn_name(db).unwrap();
-            }
-        }
+macro_rules! multiple_config_test {
+    ($fn_name:ident, $ignore:meta) => {
+        multiple_vfs_test!(
+            $fn_name,
+            "default",
+            grebedb::DatabaseOptions::default(),
+            $ignore
+        );
 
-        paste::paste! {
-            #[test]
-            #[ignore]
-            fn [<test_disk_ $fn_name>]() {
-                let temp_dir = $crate::common::make_tempdir();
-                let db = grebedb::Database::open_path(temp_dir.path(), grebedb::DatabaseOptions::default()).unwrap();
-                $fn_name(db).unwrap();
-            }
-        }
-    };
-}
+        multiple_vfs_test!(
+            $fn_name,
+            "small_options",
+            grebedb::DatabaseOptions {
+                keys_per_node: 128,
+                page_cache_size: 8,
+                ..Default::default()
+            },
+            $ignore
+        );
 
-#[macro_export]
-macro_rules! multiple_vfs_small_options_test {
-    ($fn_name:ident) => {
-        paste::paste! {
-            #[test]
-            fn [<test_memory_small_options_ $fn_name>]() {
-                let options = grebedb::DatabaseOptions {
-                    keys_per_node: 128,
-                    page_cache_size: 4,
-                    ..Default::default()
-                };
-                let db = grebedb::Database::open_memory(options).unwrap();
-                $fn_name(db).unwrap();
-            }
-        }
-
-        paste::paste! {
-            #[test]
-            fn [<test_disk_small_options_ $fn_name>]() {
-                let temp_dir = $crate::common::make_tempdir();
-                let options = grebedb::DatabaseOptions {
-                    keys_per_node: 128,
-                    page_cache_size: 4,
-                    ..Default::default()
-                };
-                let db = grebedb::Database::open_path(temp_dir.path(), options).unwrap();
-                $fn_name(db).unwrap();
-            }
-        }
+        multiple_vfs_test!(
+            $fn_name,
+            "remove_empty_nodes",
+            grebedb::DatabaseOptions {
+                remove_empty_nodes: false,
+                ..Default::default()
+            },
+            $ignore
+        );
     };
 }
 

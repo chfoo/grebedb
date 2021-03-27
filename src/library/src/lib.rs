@@ -50,19 +50,51 @@ pub type KeyValuePair = (Vec<u8>, Vec<u8>);
 pub struct DatabaseOptions {
     /// Option when opening a database. Default: LoadOrCreate.
     pub open_mode: DatabaseOpenMode,
+
     /// Maximum number of keys per node. Default: 1024.
+    ///
+    /// This value specifies the threshold when node is split into two and
+    /// the tree is rebalanced.
     pub keys_per_node: usize,
+
+    /// Whether to remove empty nodes from the tree. Default: true
+    ///
+    /// When this option is true, empty nodes are unlinked up towards the
+    /// root tree node and its associated pages are marked as free for reuse.
+    /// This is recommended if your application regularly removes keys in
+    /// a sequential manner to rebalance the tree and reuse pages.
+    ///
+    /// When this option is false, empty nodes remain in the tree and the
+    /// tree remains unbalanced. This behavior may improve performance by
+    /// disabling the tree cleanup manipulations, if your application rarely
+    /// removes key-value pairs.
+    pub remove_empty_nodes: bool,
+
     /// Number of pages held in memory cache. Default: 64.
     pub page_cache_size: usize,
+
     /// Whether to use file locking to prevent corruption by multiple processes.
     /// Default: true.
     pub file_locking: bool,
+
     /// Whether to flush the data to the file system periodically when a
     /// database operation is performed.
     /// Default: true.
+    ///
+    /// When true, data is flushed when the database is dropped or when enough
+    /// modifications accumulate.
+    ///
+    /// There is no background maintenance thread that does automatic flushing;
+    /// automatic flushing occurs when a database modification operation
+    /// function, such as put() or remove(), is called.
     pub automatic_flush: bool,
+
     /// Number of modifications required for automatic flush to be considered.
     /// Default: 2048
+    ///
+    /// When the threshold is reached after 300 seconds,
+    /// or the threshold × 2 is reached after 60 seconds,
+    /// a flush is scheduled to be performed on the next modification.
     pub automatic_flush_threshold: usize,
 }
 
@@ -71,6 +103,7 @@ impl Default for DatabaseOptions {
         Self {
             open_mode: DatabaseOpenMode::default(),
             keys_per_node: 1024,
+            remove_empty_nodes: true,
             page_cache_size: 64,
             file_locking: true,
             automatic_flush: true,
@@ -154,7 +187,12 @@ impl Database {
             vfs
         };
 
-        let mut tree = Tree::open(vfs, options.clone().into(), options.keys_per_node)?;
+        let mut tree = Tree::open(
+            vfs,
+            options.clone().into(),
+            options.keys_per_node,
+            options.remove_empty_nodes,
+        )?;
 
         match options.open_mode {
             DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => {
@@ -205,7 +243,6 @@ impl Database {
     where
         K: AsRef<[u8]>,
     {
-        self.maybe_flush(false)?;
         let mut value = Vec::new();
         if self.tree.get(key.as_ref(), &mut value)? {
             Ok(Some(value))
@@ -221,7 +258,6 @@ impl Database {
     where
         K: AsRef<[u8]>,
     {
-        self.maybe_flush(false)?;
         self.tree.get(key.as_ref(), value_destination)
     }
 
@@ -281,11 +317,7 @@ impl Database {
     /// Calling this function ensures that all modifications cached in memory
     /// are written to the file system before this function returns.
     ///
-    /// If automatic flushing is enabled in the options, data is flushed
-    /// when the database is dropped or when enough modifications accumulate.
-    ///
-    /// There is no background maintenance thread that does automatic flushing;
-    /// automatic flushing occurs when a database operation function is called.
+    /// For details about automatic flushing, see [`DatabaseOptions`].
     pub fn flush(&mut self) -> Result<(), Error> {
         self.tree.flush()
     }

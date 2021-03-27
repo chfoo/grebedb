@@ -199,15 +199,34 @@ fn rand_operation(mut database: Database, rounds:usize) -> Result<(), Error> {
     Ok(())
 }
 
-fn rand_operation_20000(database: Database) -> Result<(), Error> {
-    rand_operation(database, 20000)
+fn rand_operation_10000(database: Database) -> Result<(), Error> {
+    rand_operation(database, 10000)
 }
 
 fn rand_operation_100000(database: Database) -> Result<(), Error> {
     rand_operation(database, 100000)
 }
 
-multiple_vfs_test!(rand_operation_20000);
+#[cfg(debug_assertions)]
+mod a {
+    use grebedb::DatabaseOptions;
 
-multiple_vfs_test_ignore!(rand_operation_100000);
+    use super::*;
+
+    #[test]
+    fn rand_operation_10000_fast() {
+        let database = Database::open_memory(DatabaseOptions::default()).unwrap();
+        rand_operation(database, 10000).unwrap();
+    }
+
+    matrix_test_ignore!(rand_operation_10000);
+    matrix_test_ignore!(rand_operation_100000);
+}
+#[cfg(not(debug_assertions))]
+mod a {
+    use super::*;
+
+    matrix_test!(rand_operation_10000);
+    matrix_test_ignore!(rand_operation_100000);
+}
 

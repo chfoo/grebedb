@@ -49,7 +49,5 @@ fn sequential_numbers(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
-multiple_vfs_test!(simple_get_put_remove);
-multiple_vfs_small_options_test!(simple_get_put_remove);
-multiple_vfs_test!(sequential_numbers);
-multiple_vfs_small_options_test!(sequential_numbers);
+matrix_test!(simple_get_put_remove);
+matrix_test!(sequential_numbers);

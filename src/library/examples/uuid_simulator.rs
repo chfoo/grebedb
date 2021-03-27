@@ -1,14 +1,15 @@
-// Sample program that inserts monotonic-like key-values infinitely.
+// Sample program that inserts UUID (random ordered) key-values infinitely.
 
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use clap::{App, Arg};
 use grebedb::{Database, DatabaseOptions};
 use rand::{RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
+use uuid::Uuid;
 
 fn main() -> Result<(), grebedb::Error> {
-    let matches = App::new("GrebeDB monotonic-like insert simulator")
+    let matches = App::new("GrebeDB UUID insert simulator")
         .arg(
             Arg::with_name("delay")
                 .long("delay")
@@ -21,7 +22,7 @@ fn main() -> Result<(), grebedb::Error> {
     let delay = matches.value_of("delay").unwrap();
     let delay = delay.parse::<f32>().unwrap();
 
-    let path = std::path::PathBuf::from("grebedb_example_data/insert_simulator/");
+    let path = std::path::PathBuf::from("grebedb_example_data/uuid_simulator/");
 
     std::fs::create_dir_all(&path)?;
 
@@ -32,17 +33,14 @@ fn main() -> Result<(), grebedb::Error> {
 
     loop {
         for _ in 0..100 {
-            let duration = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap();
-            let ms = duration.as_micros() as u64;
-            let key = format!("{:016x}{:016x}", ms, counter);
+            let id = Uuid::new_v4();
+            let key = id.as_bytes();
 
             let mut rng = XorShiftRng::seed_from_u64(counter);
             let mut buffer = vec![0u8; 1024];
             rng.fill_bytes(&mut buffer);
 
-            db.put(key, buffer)?;
+            db.put(key.to_vec(), buffer)?;
 
             counter += 1;
         }

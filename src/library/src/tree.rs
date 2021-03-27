@@ -316,6 +316,7 @@ impl Debug for LeafNode {
 pub struct Tree {
     page_table: PageTable<Node>,
     keys_per_node: usize,
+    remove_empty_nodes: bool,
 }
 
 impl Tree {
@@ -323,12 +324,14 @@ impl Tree {
         vfs: Box<dyn Vfs + Sync + Send>,
         page_table_options: PageTableOptions,
         keys_per_node: usize,
+        remove_empty_nodes: bool,
     ) -> Result<Self, Error> {
         assert!(keys_per_node >= 2);
 
         Ok(Self {
             page_table: PageTable::open(vfs, page_table_options)?,
             keys_per_node,
+            remove_empty_nodes,
         })
     }
 
@@ -414,7 +417,10 @@ impl Tree {
             leaf_node.len()
         };
 
-        // TODO: remove empty nodes
+        if self.remove_empty_nodes {
+            // TODO: remove empty nodes
+        }
+
 
         Ok(())
     }
