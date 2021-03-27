@@ -76,19 +76,29 @@ impl<T> PageTracker<T> {
     }
 
     #[must_use]
-    pub fn put_to_cache(&mut self, page_id: PageId, page: Page<T>) -> Option<(PageId, Page<T>)> {
+    pub fn put_to_cache(&mut self, page_id: PageId, page: Page<T>) -> Option<EvictedPage<T>> {
         self.cached_pages.insert(page_id, page);
         self.modified_pages.insert(page_id);
 
         if let Some(evicted_page_id) = self.lru.insert(page_id) {
-            self.modified_pages.remove(&evicted_page_id);
+            let modified = self.modified_pages.remove(&evicted_page_id);
             let page = self.cached_pages.remove(&evicted_page_id).unwrap();
 
-            Some((evicted_page_id, page))
+            Some(EvictedPage {
+                id: evicted_page_id,
+                page,
+                modified,
+            })
         } else {
             None
         }
     }
+}
+
+struct EvictedPage<T> {
+    id: PageId,
+    page: Page<T>,
+    modified: bool,
 }
 
 #[derive(Default)]
@@ -336,11 +346,8 @@ where
             content: Some(content),
         };
 
-        if let Some((evicted_page_id, evicted_page)) = self.page_tracker.put_to_cache(page_id, page)
-        {
-            if self.options.open_mode != OpenMode::ReadOnly {
-                self.save_evicted_page(evicted_page_id, evicted_page)?;
-            }
+        if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+            self.maybe_save_evicted_page(evicted_page_info)?;
         }
 
         Ok(())
@@ -395,9 +402,8 @@ where
             content: None,
         };
 
-        if let Some((evicted_page_id, evicted_page)) = self.page_tracker.put_to_cache(page_id, page)
-        {
-            self.save_evicted_page(evicted_page_id, evicted_page)?;
+        if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+            self.maybe_save_evicted_page(evicted_page_info)?;
         }
 
         self.counter_tracker.free_page_id(page_id);
@@ -535,12 +541,8 @@ where
                 return Ok(false);
             }
 
-            if let Some((evicted_page_id, evicted_page)) =
-                self.page_tracker.put_to_cache(page_id, page)
-            {
-                if self.options.open_mode != OpenMode::ReadOnly {
-                    self.save_evicted_page(evicted_page_id, evicted_page)?;
-                }
+            if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+                self.maybe_save_evicted_page(evicted_page_info)?;
             }
 
             Ok(true)
@@ -607,6 +609,14 @@ where
 
         self.format
             .write_file(self.vfs.as_mut(), METADATA_COPY_FILENAME, metadata)?;
+
+        Ok(())
+    }
+
+    fn maybe_save_evicted_page(&mut self, evicted_page_info: EvictedPage<T>) -> Result<(), Error> {
+        if self.options.open_mode != OpenMode::ReadOnly && evicted_page_info.modified {
+            self.save_evicted_page(evicted_page_info.id, evicted_page_info.page)?;
+        }
 
         Ok(())
     }
