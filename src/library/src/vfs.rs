@@ -300,13 +300,15 @@ impl Vfs for OsVfs {
             VfsSyncOption::Data => {
                 let mut file = std::fs::File::create(self.root.join(path))?;
                 file.write_all(&data)?;
-                file.sync_all()?;
+                file.sync_data()?;
+
                 Ok(())
             }
             VfsSyncOption::All => {
                 let mut file = std::fs::File::create(self.root.join(path))?;
                 file.write_all(&data)?;
-                file.sync_data()?;
+                file.sync_all()?;
+
                 Ok(())
             }
         }
