@@ -40,7 +40,7 @@ pub use crate::error::Error;
 use crate::format::Format;
 use crate::page::{Metadata, OpenMode, Page, PageTableOptions};
 use crate::tree::{Node, Tree, TreeCursor, TreeMetadata};
-use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs};
+use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs, VfsSyncOption};
 
 /// Type alias for an owned key-value pair.
 pub type KeyValuePair = (Vec<u8>, Vec<u8>);
@@ -63,6 +63,10 @@ pub struct DatabaseOptions {
     /// Whether to use file locking to prevent corruption by multiple processes.
     /// Default: true.
     pub file_locking: bool,
+
+    /// Level of file synchronization to increase durability on disk file systems.
+    /// Default: Data
+    pub file_sync: DatabaseSyncOption,
 
     /// Whether to flush the data to the file system periodically when a
     /// database operation is performed.
@@ -95,6 +99,7 @@ impl Default for DatabaseOptions {
             keys_per_node: 1024,
             page_cache_size: 64,
             file_locking: true,
+            file_sync: DatabaseSyncOption::default(),
             automatic_flush: true,
             automatic_flush_threshold: 2048,
             compression_level: DatabaseCompressionLevel::default(),
@@ -125,6 +130,7 @@ impl From<DatabaseOptions> for PageTableOptions {
             open_mode: options.open_mode.into(),
             page_cache_size: options.page_cache_size,
             file_locking: options.file_locking,
+            file_sync: options.file_sync.into(),
             keys_per_node: options.keys_per_node,
             compression_level: options.compression_level.to_zstd(),
         }
@@ -132,7 +138,7 @@ impl From<DatabaseOptions> for PageTableOptions {
 }
 
 /// Database open modes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseOpenMode {
     /// Open an existing database only if it exists.
     LoadOnly,
@@ -162,7 +168,7 @@ impl From<DatabaseOpenMode> for OpenMode {
 }
 
 /// Database data compression level.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseCompressionLevel {
     /// Disable compression.
     None,
@@ -196,6 +202,41 @@ impl DatabaseCompressionLevel {
             Self::Low => Some(3),
             Self::Medium => Some(9),
             Self::High => Some(19),
+        }
+    }
+}
+
+/// Level of file synchronization for files created by the database.
+///
+/// These options are equivalent to [`vfs::VfsSyncOption`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseSyncOption {
+    /// Don't require any flushing and simply overwrite files.
+    None,
+
+    /// Flush file content only and use file rename technique.
+    ///
+    /// Flush command is equivalent to `File::sync_data()` or Unix `fdatasync()`.
+    Data,
+
+    /// Flush file content including metadata and use file rename technique.
+    ///
+    /// Flush command is equivalent to `File::sync_all()` or Unix `fsync()`.
+    All,
+}
+
+impl Default for DatabaseSyncOption {
+    fn default() -> Self {
+        Self::Data
+    }
+}
+
+impl From<DatabaseSyncOption> for VfsSyncOption {
+    fn from(option: DatabaseSyncOption) -> Self {
+        match option {
+            DatabaseSyncOption::None => Self::None,
+            DatabaseSyncOption::Data => Self::Data,
+            DatabaseSyncOption::All => Self::All,
         }
     }
 }

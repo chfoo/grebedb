@@ -34,13 +34,10 @@ pub trait Vfs {
     ///
     /// The file will be created if it does not exist and existing data is
     /// overwritten.
-    fn write(&mut self, path: &str, data: &[u8]) -> Result<(), Error>;
-
-    /// Write the contents to a file and ensure data is written to storage.
     ///
-    /// Like `write` but all data is flushed from buffers to persistent
-    /// storage before returning.
-    fn write_and_sync_all(&mut self, path: &str, data: &[u8]) -> Result<(), Error>;
+    /// If `sync_option` is a flushing operation, it will flush data from
+    /// buffers to persistent storage before returning.
+    fn write(&mut self, path: &str, data: &[u8], sync_option: VfsSyncOption) -> Result<(), Error>;
 
     /// Delete a file.
     ///
@@ -109,6 +106,25 @@ pub trait Vfs {
     fn exists(&self, path: &str) -> Result<bool, Error>;
 }
 
+/// File system synchronization options for synchronizing data to disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VfsSyncOption {
+    /// Don't require any flushing.
+    None,
+
+    /// Flush file content only. Equivalent to `File::sync_data()` or Unix `fdatasync()`.
+    Data,
+
+    /// Flush file content and metadata. Equivalent to `File::sync_all()` or Unix `fsync()`.
+    All,
+}
+
+impl Default for VfsSyncOption {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 /// A file system that is stored temporarily to memory.
 #[derive(Clone)]
 pub struct MemoryVfs {
@@ -152,14 +168,10 @@ impl Vfs for MemoryVfs {
         Ok(buffer)
     }
 
-    fn write(&mut self, path: &str, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, path: &str, data: &[u8], _sync_option: VfsSyncOption) -> Result<(), Error> {
         let mut file = self.vfs.join(path)?.create_file()?;
         file.write_all(data)?;
         Ok(())
-    }
-
-    fn write_and_sync_all(&mut self, path: &str, data: &[u8]) -> Result<(), Error> {
-        self.write(path, data)
     }
 
     fn remove_file(&mut self, path: &str) -> Result<(), Error> {
@@ -282,15 +294,22 @@ impl Vfs for OsVfs {
         Ok(std::fs::read(self.root.join(path))?)
     }
 
-    fn write(&mut self, path: &str, data: &[u8]) -> Result<(), Error> {
-        Ok(std::fs::write(self.root.join(path), data)?)
-    }
-
-    fn write_and_sync_all(&mut self, path: &str, data: &[u8]) -> Result<(), Error> {
-        let mut file = std::fs::File::create(self.root.join(path))?;
-        file.write_all(&data)?;
-        file.sync_all()?;
-        Ok(())
+    fn write(&mut self, path: &str, data: &[u8], sync_option: VfsSyncOption) -> Result<(), Error> {
+        match sync_option {
+            VfsSyncOption::None => Ok(std::fs::write(self.root.join(path), data)?),
+            VfsSyncOption::Data => {
+                let mut file = std::fs::File::create(self.root.join(path))?;
+                file.write_all(&data)?;
+                file.sync_all()?;
+                Ok(())
+            }
+            VfsSyncOption::All => {
+                let mut file = std::fs::File::create(self.root.join(path))?;
+                file.write_all(&data)?;
+                file.sync_data()?;
+                Ok(())
+            }
+        }
     }
 
     fn remove_file(&mut self, path: &str) -> Result<(), Error> {
@@ -368,11 +387,12 @@ impl Vfs for ReadOnlyVfs {
         self.inner.read(path)
     }
 
-    fn write(&mut self, _path: &str, _data: &[u8]) -> Result<(), Error> {
-        Err(Error::ReadOnly)
-    }
-
-    fn write_and_sync_all(&mut self, _path: &str, _data: &[u8]) -> Result<(), Error> {
+    fn write(
+        &mut self,
+        _path: &str,
+        _data: &[u8],
+        _sync_option: VfsSyncOption,
+    ) -> Result<(), Error> {
         Err(Error::ReadOnly)
     }
 
@@ -420,8 +440,12 @@ mod tests {
         let mut vfs = MemoryVfs::new();
 
         vfs.create_dir_all("a/b/c").unwrap();
-        vfs.write("a/b/c/my_file", "hello world!".as_bytes())
-            .unwrap();
+        vfs.write(
+            "a/b/c/my_file",
+            "hello world!".as_bytes(),
+            VfsSyncOption::None,
+        )
+        .unwrap();
         vfs.remove_empty_dir_all("a/b/c").unwrap();
         assert!(vfs.exists("a/b/c").unwrap());
         vfs.remove_file("a/b/c/my_file").unwrap();

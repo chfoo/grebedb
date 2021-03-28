@@ -2,7 +2,7 @@ mod common;
 
 use grebedb::{
     vfs::{MemoryVfs, ReadOnlyVfs},
-    Database, DatabaseCompressionLevel, DatabaseOpenMode, DatabaseOptions,
+    Database, DatabaseCompressionLevel, DatabaseOpenMode, DatabaseOptions, DatabaseSyncOption,
 };
 
 #[test]
@@ -65,13 +65,36 @@ fn test_no_compression() -> anyhow::Result<()> {
 fn test_no_file_locking() -> anyhow::Result<()> {
     let dir = common::make_tempdir();
     let options = DatabaseOptions {
-        file_locking:false,
+        file_locking: false,
         ..Default::default()
     };
     let mut db = Database::open_path(dir.path(), options)?;
 
     db.put("my key", "hello world")?;
     db.flush()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_no_file_sync() -> anyhow::Result<()> {
+    let dir = common::make_tempdir();
+    let options = DatabaseOptions {
+        file_sync: DatabaseSyncOption::None,
+        keys_per_node: 128,
+        page_cache_size: 4,
+        ..Default::default()
+    };
+    let mut db = Database::open_path(dir.path(), options)?;
+
+    for num in 0..1000 {
+        db.put(format!("my key {}", num), "hello world")?;
+    }
+    db.flush()?;
+
+    for num in 0..1000 {
+        db.get(format!("my key {}", num))?;
+    }
 
     Ok(())
 }

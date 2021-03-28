@@ -4,7 +4,11 @@ use relative_path::RelativePath;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, lru::LruVec, vfs::Vfs};
+use crate::{
+    error::Error,
+    lru::LruVec,
+    vfs::{Vfs, VfsSyncOption},
+};
 
 const MAGIC_BYTES: [u8; 8] = [0xFE, b'G', b'r', b'e', b'b', b'e', 0x00, 0x00];
 
@@ -66,7 +70,13 @@ impl Format {
         self.deserialize_page(path)
     }
 
-    pub fn write_file<T>(&mut self, vfs: &mut dyn Vfs, path: &str, payload: T) -> Result<(), Error>
+    pub fn write_file<T>(
+        &mut self,
+        vfs: &mut dyn Vfs,
+        path: &str,
+        payload: T,
+        sync_option: VfsSyncOption,
+    ) -> Result<(), Error>
     where
         T: Serialize,
     {
@@ -93,7 +103,7 @@ impl Format {
             vfs.create_dir_all(dir_path.as_str())?;
         }
 
-        vfs.write_and_sync_all(path, &self.file_buffer)?;
+        vfs.write(path, &self.file_buffer, sync_option)?;
 
         Ok(())
     }
@@ -231,7 +241,7 @@ mod tests {
         let mut format = Format::default();
         let mut vfs = MemoryVfs::new();
 
-        format.write_file(&mut vfs, "my_file", "hello world")?;
+        format.write_file(&mut vfs, "my_file", "hello world", VfsSyncOption::None)?;
 
         let payload: String = format.read_file(&mut vfs, "my_file")?;
 

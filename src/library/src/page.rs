@@ -6,7 +6,12 @@ use std::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::Error, format::Format, lru::LruVec, vfs::Vfs};
+use crate::{
+    error::Error,
+    format::Format,
+    lru::LruVec,
+    vfs::{Vfs, VfsSyncOption},
+};
 
 const LOCK_FILENAME: &str = "grebedb_lock.lock";
 const METADATA_FILENAME: &str = "grebedb_meta.grebedb";
@@ -70,7 +75,7 @@ impl<T> PageTracker<T> {
         self.cached_pages.get(&page_id)
     }
 
-    pub fn get_from_cache_without_touch(&mut self, page_id: PageId) -> Option<&Page<T>> {
+    pub fn _peek(&self, page_id: PageId) -> Option<&Page<T>> {
         self.cached_pages.get(&page_id)
     }
 
@@ -102,6 +107,16 @@ impl<T> PageTracker<T> {
         } else {
             None
         }
+    }
+
+    // Reserved for when borrow checker doesn't agree
+    pub fn take(&mut self, page_id: PageId) -> Option<Page<T>> {
+        self.cached_pages.remove(&page_id)
+    }
+
+    // Reserved for when borrow checker doesn't agree
+    pub fn untake(&mut self, page_id: PageId, page: Page<T>) {
+        self.cached_pages.insert(page_id, page);
     }
 }
 
@@ -213,6 +228,7 @@ pub struct PageTableOptions {
     pub page_cache_size: usize,
     pub keys_per_node: usize,
     pub file_locking: bool,
+    pub file_sync: VfsSyncOption,
     pub compression_level: Option<i32>,
 }
 
@@ -223,6 +239,7 @@ impl Default for PageTableOptions {
             page_cache_size: 64,
             keys_per_node: 1024,
             file_locking: true,
+            file_sync: VfsSyncOption::Data,
             compression_level: Some(3),
         }
     }
@@ -590,12 +607,22 @@ where
         self.check_if_read_only()?;
 
         let path_1 = make_path(page_id, RevisionFlag::New);
-        let path_1_temp = format!("{}.tmp", &path_1);
 
-        self.format
-            .write_file(self.vfs.as_mut(), &path_1_temp, page)?;
+        if self.options.file_sync == VfsSyncOption::None {
+            self.format
+                .write_file(self.vfs.as_mut(), &path_1, page, self.options.file_sync)?;
+        } else {
+            let path_1_temp = format!("{}.tmp", &path_1);
 
-        self.vfs.rename_file(&path_1_temp, &path_1)?;
+            self.format.write_file(
+                self.vfs.as_mut(),
+                &path_1_temp,
+                page,
+                self.options.file_sync,
+            )?;
+
+            self.vfs.rename_file(&path_1_temp, &path_1)?;
+        }
 
         Ok(())
     }
@@ -603,17 +630,11 @@ where
     fn save_page_from_cache(&mut self, page_id: PageId) -> Result<(), Error> {
         self.check_if_read_only()?;
 
-        let path_1 = make_path(page_id, RevisionFlag::New);
-        let path_1_temp = format!("{}.tmp", &path_1);
+        let page = self.page_tracker.take(page_id).unwrap();
+        let result = self.save_page(page_id, &page);
+        self.page_tracker.untake(page_id, page);
 
-        let page = self
-            .page_tracker
-            .get_from_cache_without_touch(page_id)
-            .unwrap();
-        self.format
-            .write_file(self.vfs.as_mut(), &path_1_temp, page)?;
-
-        self.vfs.rename_file(&path_1_temp, &path_1)?;
+        result?;
 
         Ok(())
     }
@@ -635,19 +656,37 @@ where
             auxiliary: self.auxiliary_metadata.clone(),
         };
 
-        self.format
-            .write_file(self.vfs.as_mut(), METADATA_NEW_FILENAME, metadata.clone())?;
-
         if self.vfs.exists(METADATA_FILENAME)? {
             let data = self.vfs.read(METADATA_FILENAME)?;
-            self.vfs.write(METADATA_OLD_FILENAME, &data)?;
+            self.vfs
+                .write(METADATA_OLD_FILENAME, &data, self.options.file_sync)?;
         }
 
-        self.vfs
-            .rename_file(METADATA_NEW_FILENAME, METADATA_FILENAME)?;
+        if self.options.file_sync == VfsSyncOption::None {
+            self.format.write_file(
+                self.vfs.as_mut(),
+                METADATA_FILENAME,
+                metadata.clone(),
+                self.options.file_sync,
+            )?;
+        } else {
+            self.format.write_file(
+                self.vfs.as_mut(),
+                METADATA_NEW_FILENAME,
+                metadata.clone(),
+                self.options.file_sync,
+            )?;
 
-        self.format
-            .write_file(self.vfs.as_mut(), METADATA_COPY_FILENAME, metadata)?;
+            self.vfs
+                .rename_file(METADATA_NEW_FILENAME, METADATA_FILENAME)?;
+        }
+
+        self.format.write_file(
+            self.vfs.as_mut(),
+            METADATA_COPY_FILENAME,
+            metadata,
+            self.options.file_sync,
+        )?;
 
         Ok(())
     }

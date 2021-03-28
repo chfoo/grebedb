@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use grebedb::vfs::{MemoryVfs, Vfs};
+use grebedb::vfs::{MemoryVfs, Vfs, VfsSyncOption};
 use tempfile::TempDir;
 
 #[allow(dead_code)]
@@ -114,14 +114,14 @@ impl Vfs for CrashingVfs {
         self.inner.read(path)
     }
 
-    fn write(&mut self, path: &str, data: &[u8]) -> Result<(), grebedb::Error> {
+    fn write(
+        &mut self,
+        path: &str,
+        data: &[u8],
+        sync_option: VfsSyncOption,
+    ) -> Result<(), grebedb::Error> {
         eprintln!("write {}", path);
-        self.inner.write(path, data)
-    }
-
-    fn write_and_sync_all(&mut self, path: &str, data: &[u8]) -> Result<(), grebedb::Error> {
-        eprintln!("write_and_sync_all {}", path);
-        self.inner.write_and_sync_all(path, data)
+        self.inner.write(path, data, sync_option)
     }
 
     fn remove_file(&mut self, path: &str) -> Result<(), grebedb::Error> {
