@@ -1,4 +1,4 @@
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 
 #[test]
 fn test_send() {
@@ -14,7 +14,7 @@ fn test_sync() {
 
 #[test]
 fn test_send_thread() -> anyhow::Result<()> {
-    let mut database = Database::open_memory(DatabaseOptions::default())?;
+    let mut database = Database::open_memory(Options::default())?;
 
     database.put("k", "v")?;
 

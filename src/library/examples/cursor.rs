@@ -1,9 +1,9 @@
 // Demonstrates the use of a cursor.
 
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 
 fn main() -> Result<(), grebedb::Error> {
-    let options = DatabaseOptions::default();
+    let options = Options::default();
     let mut db = Database::open_memory(options)?;
 
     for number in 0..10 {

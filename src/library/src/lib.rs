@@ -4,10 +4,10 @@
 //! To open a database, use [`Database`]:
 //!
 //! ```
-//! use grebedb::{Database, DatabaseOptions};
+//! use grebedb::{Database, Options};
 //!
 //! # fn main() -> Result<(), grebedb::Error> {
-//! let options = DatabaseOptions::default();
+//! let options = Options::default();
 //! // let mut db = Database::open_memory("path/to/empty/directory/", options)?;
 //! let mut db = Database::open_memory(options)?;
 //!
@@ -38,7 +38,7 @@ use std::{
 
 pub use crate::error::Error;
 use crate::format::Format;
-use crate::page::{Metadata, OpenMode, Page, PageTableOptions};
+use crate::page::{Metadata as PageMetadata, Page, PageOpenMode, PageTableOptions};
 use crate::tree::{Node, Tree, TreeCursor, TreeMetadata};
 use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs, VfsSyncOption};
 
@@ -47,9 +47,9 @@ pub type KeyValuePair = (Vec<u8>, Vec<u8>);
 
 /// Database configuration options.
 #[derive(Debug, Clone)]
-pub struct DatabaseOptions {
+pub struct Options {
     /// Option when opening a database. Default: LoadOrCreate.
-    pub open_mode: DatabaseOpenMode,
+    pub open_mode: OpenMode,
 
     /// Maximum number of keys per node. Default: 1024.
     ///
@@ -66,7 +66,7 @@ pub struct DatabaseOptions {
 
     /// Level of file synchronization to increase durability on disk file systems.
     /// Default: Data
-    pub file_sync: DatabaseSyncOption,
+    pub file_sync: SyncOption,
 
     /// Whether to flush the data to the file system periodically when a
     /// database operation is performed.
@@ -89,25 +89,25 @@ pub struct DatabaseOptions {
     pub automatic_flush_threshold: usize,
 
     /// Compression level for each page. Default: Fast.
-    pub compression_level: DatabaseCompressionLevel,
+    pub compression_level: CompressionLevel,
 }
 
-impl Default for DatabaseOptions {
+impl Default for Options {
     fn default() -> Self {
         Self {
-            open_mode: DatabaseOpenMode::default(),
+            open_mode: OpenMode::default(),
             keys_per_node: 1024,
             page_cache_size: 64,
             file_locking: true,
-            file_sync: DatabaseSyncOption::default(),
+            file_sync: SyncOption::default(),
             automatic_flush: true,
             automatic_flush_threshold: 2048,
-            compression_level: DatabaseCompressionLevel::default(),
+            compression_level: CompressionLevel::default(),
         }
     }
 }
 
-impl DatabaseOptions {
+impl Options {
     fn validate(&self) -> Result<(), Error> {
         if self.keys_per_node < 2 {
             return Err(Error::InvalidConfig {
@@ -124,8 +124,8 @@ impl DatabaseOptions {
     }
 }
 
-impl From<DatabaseOptions> for PageTableOptions {
-    fn from(options: DatabaseOptions) -> Self {
+impl From<Options> for PageTableOptions {
+    fn from(options: Options) -> Self {
         Self {
             open_mode: options.open_mode.into(),
             page_cache_size: options.page_cache_size,
@@ -139,7 +139,7 @@ impl From<DatabaseOptions> for PageTableOptions {
 
 /// Database open modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseOpenMode {
+pub enum OpenMode {
     /// Open an existing database only if it exists.
     LoadOnly,
     /// Create a database only if it does not already exist.
@@ -150,26 +150,26 @@ pub enum DatabaseOpenMode {
     ReadOnly,
 }
 
-impl Default for DatabaseOpenMode {
+impl Default for OpenMode {
     fn default() -> Self {
         Self::LoadOrCreate
     }
 }
 
-impl From<DatabaseOpenMode> for OpenMode {
-    fn from(option: DatabaseOpenMode) -> Self {
+impl From<OpenMode> for PageOpenMode {
+    fn from(option: OpenMode) -> Self {
         match option {
-            DatabaseOpenMode::LoadOnly => OpenMode::LoadOnly,
-            DatabaseOpenMode::CreateOnly => OpenMode::CreateOnly,
-            DatabaseOpenMode::LoadOrCreate => OpenMode::LoadOrCreate,
-            DatabaseOpenMode::ReadOnly => OpenMode::ReadOnly,
+            OpenMode::LoadOnly => PageOpenMode::LoadOnly,
+            OpenMode::CreateOnly => PageOpenMode::CreateOnly,
+            OpenMode::LoadOrCreate => PageOpenMode::LoadOrCreate,
+            OpenMode::ReadOnly => PageOpenMode::ReadOnly,
         }
     }
 }
 
 /// Database data compression level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseCompressionLevel {
+pub enum CompressionLevel {
     /// Disable compression.
     None,
 
@@ -189,13 +189,13 @@ pub enum DatabaseCompressionLevel {
     High,
 }
 
-impl Default for DatabaseCompressionLevel {
+impl Default for CompressionLevel {
     fn default() -> Self {
         Self::Low
     }
 }
 
-impl DatabaseCompressionLevel {
+impl CompressionLevel {
     fn to_zstd(&self) -> Option<i32> {
         match self {
             Self::None => None,
@@ -210,7 +210,7 @@ impl DatabaseCompressionLevel {
 ///
 /// These options are equivalent to [`vfs::VfsSyncOption`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseSyncOption {
+pub enum SyncOption {
     /// Don't require any flushing and simply overwrite files.
     None,
 
@@ -225,35 +225,35 @@ pub enum DatabaseSyncOption {
     All,
 }
 
-impl Default for DatabaseSyncOption {
+impl Default for SyncOption {
     fn default() -> Self {
         Self::Data
     }
 }
 
-impl From<DatabaseSyncOption> for VfsSyncOption {
-    fn from(option: DatabaseSyncOption) -> Self {
+impl From<SyncOption> for VfsSyncOption {
+    fn from(option: SyncOption) -> Self {
         match option {
-            DatabaseSyncOption::None => Self::None,
-            DatabaseSyncOption::Data => Self::Data,
-            DatabaseSyncOption::All => Self::All,
+            SyncOption::None => Self::None,
+            SyncOption::Data => Self::Data,
+            SyncOption::All => Self::All,
         }
     }
 }
 
 /// GrebeDB database interface.
 pub struct Database {
-    options: DatabaseOptions,
+    options: Options,
     tree: Tree,
     flush_tracker: Option<FlushTracker>,
 }
 
 impl Database {
     /// Open a database using the given virtual file system and options.
-    pub fn open(vfs: Box<dyn Vfs + Sync + Send>, options: DatabaseOptions) -> Result<Self, Error> {
+    pub fn open(vfs: Box<dyn Vfs + Sync + Send>, options: Options) -> Result<Self, Error> {
         options.validate()?;
 
-        let vfs: Box<dyn Vfs + Sync + Send> = if options.open_mode == DatabaseOpenMode::ReadOnly {
+        let vfs: Box<dyn Vfs + Sync + Send> = if options.open_mode == OpenMode::ReadOnly {
             Box::new(ReadOnlyVfs::new(vfs))
         } else {
             vfs
@@ -262,22 +262,21 @@ impl Database {
         let mut tree = Tree::open(vfs, options.clone().into())?;
 
         match options.open_mode {
-            DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => {
+            OpenMode::CreateOnly | OpenMode::LoadOrCreate => {
                 tree.init_if_empty()?;
                 tree.upgrade()?;
             }
-            DatabaseOpenMode::LoadOnly => {
+            OpenMode::LoadOnly => {
                 tree.upgrade()?;
             }
             _ => {}
         }
 
-        let flush_tracker =
-            if options.automatic_flush && options.open_mode != DatabaseOpenMode::ReadOnly {
-                Some(FlushTracker::new(options.automatic_flush_threshold))
-            } else {
-                None
-            };
+        let flush_tracker = if options.automatic_flush && options.open_mode != OpenMode::ReadOnly {
+            Some(FlushTracker::new(options.automatic_flush_threshold))
+        } else {
+            None
+        };
 
         Ok(Self {
             options,
@@ -287,14 +286,14 @@ impl Database {
     }
 
     /// Open a database in temporary memory.
-    pub fn open_memory(options: DatabaseOptions) -> Result<Self, Error> {
+    pub fn open_memory(options: Options) -> Result<Self, Error> {
         Self::open(Box::new(MemoryVfs::default()), options)
     }
 
     /// Open a database to a path on the disk.
     ///
     /// The path must be a directory.
-    pub fn open_path<P>(root_path: P, options: DatabaseOptions) -> Result<Self, Error>
+    pub fn open_path<P>(root_path: P, options: Options) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
     {
@@ -302,8 +301,8 @@ impl Database {
     }
 
     /// Return database metadata information.
-    pub fn metadata(&self) -> DatabaseMetadata {
-        DatabaseMetadata {
+    pub fn metadata(&self) -> Metadata {
+        Metadata {
             tree_metadata: self.tree.metadata(),
         }
     }
@@ -361,25 +360,25 @@ impl Database {
     }
 
     /// Return a cursor for iterating all the key-value pairs.
-    pub fn cursor(&mut self) -> DatabaseCursor<'_> {
-        DatabaseCursor::new(&mut self.tree)
+    pub fn cursor(&mut self) -> Cursor<'_> {
+        Cursor::new(&mut self.tree)
     }
 
     /// Return a cursor for iterating all the key-value pairs within the given
     /// range.
     ///
     /// This method is equivalent of obtaining a cursor and setting
-    /// [`DatabaseCursor::seek()`] and [`DatabaseCursor::set_range_end()`]
+    /// [`Cursor::seek()`] and [`Cursor::set_range_end()`]
     pub fn cursor_range<K1, K2>(
         &mut self,
         start: Option<K1>,
         end: Option<K2>,
-    ) -> Result<DatabaseCursor<'_>, Error>
+    ) -> Result<Cursor<'_>, Error>
     where
         K1: AsRef<[u8]>,
         K2: Into<Vec<u8>>,
     {
-        let mut cursor = DatabaseCursor::new(&mut self.tree);
+        let mut cursor = Cursor::new(&mut self.tree);
 
         if let Some(start) = start {
             cursor.seek(start)?;
@@ -395,7 +394,7 @@ impl Database {
     /// Calling this function ensures that all modifications cached in memory
     /// are written to the file system before this function returns.
     ///
-    /// For details about automatic flushing, see [`DatabaseOptions`].
+    /// For details about automatic flushing, see [`Options`].
     pub fn flush(&mut self) -> Result<(), Error> {
         self.tree.flush()
     }
@@ -422,7 +421,7 @@ impl Database {
 
 impl Drop for Database {
     fn drop(&mut self) {
-        if self.options.automatic_flush && self.options.open_mode != DatabaseOpenMode::ReadOnly {
+        if self.options.automatic_flush && self.options.open_mode != OpenMode::ReadOnly {
             let _ = self.flush();
         }
     }
@@ -435,7 +434,7 @@ impl Debug for Database {
 }
 
 /// Cursor for navigating key-value pairs in sorted order.
-pub struct DatabaseCursor<'a> {
+pub struct Cursor<'a> {
     tree: &'a mut Tree,
     tree_cursor: TreeCursor,
     error: Option<Error>,
@@ -443,7 +442,7 @@ pub struct DatabaseCursor<'a> {
     range_end: Option<Vec<u8>>,
 }
 
-impl<'a> DatabaseCursor<'a> {
+impl<'a> Cursor<'a> {
     fn new(tree: &'a mut Tree) -> Self {
         Self {
             tree,
@@ -500,7 +499,7 @@ impl<'a> DatabaseCursor<'a> {
     }
 }
 
-impl<'a> Iterator for DatabaseCursor<'a> {
+impl<'a> Iterator for Cursor<'a> {
     type Item = KeyValuePair;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -523,7 +522,7 @@ impl<'a> Iterator for DatabaseCursor<'a> {
     }
 }
 
-impl<'a> Debug for DatabaseCursor<'a> {
+impl<'a> Debug for Cursor<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "DatabaseCursor")
     }
@@ -531,11 +530,11 @@ impl<'a> Debug for DatabaseCursor<'a> {
 
 #[derive(Debug)]
 /// Additional non-critical information associated with the database.
-pub struct DatabaseMetadata<'a> {
+pub struct Metadata<'a> {
     tree_metadata: Option<&'a TreeMetadata>,
 }
 
-impl<'a> DatabaseMetadata<'a> {
+impl<'a> Metadata<'a> {
     /// Return the approximate number of key-value pairs in the database.
     pub fn key_value_count(&self) -> u64 {
         if let Some(meta) = self.tree_metadata {
@@ -589,7 +588,7 @@ pub fn debug_print_page(path: &Path) -> Result<(), Error> {
     let filename = path.file_name().unwrap().to_str().unwrap();
 
     if filename.contains("meta") {
-        let payload: Metadata<TreeMetadata> = format.read_file(&mut vfs, filename)?;
+        let payload: PageMetadata<TreeMetadata> = format.read_file(&mut vfs, filename)?;
 
         eprintln!("{:?}", payload);
     } else {

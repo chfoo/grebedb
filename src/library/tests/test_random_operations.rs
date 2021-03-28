@@ -138,7 +138,7 @@ impl OperationGenerator {
     }
 }
 
-fn rand_operation(mut database: Database, rounds:usize) -> Result<(), Error> {
+fn rand_operation(mut database: Database, rounds: usize) -> Result<(), Error> {
     let mut generator = OperationGenerator::new((rounds / 4).max(10));
     let mut std_map = BTreeMap::<Vec<u8>, Vec<u8>>::new();
     let mut value_buffer = Vec::new();
@@ -209,13 +209,13 @@ fn rand_operation_100000(database: Database) -> Result<(), Error> {
 
 #[cfg(debug_assertions)]
 mod a {
-    use grebedb::DatabaseOptions;
+    use grebedb::Options;
 
     use super::*;
 
     #[test]
     fn rand_operation_10000_fast() {
-        let database = Database::open_memory(DatabaseOptions::default()).unwrap();
+        let database = Database::open_memory(Options::default()).unwrap();
         rand_operation(database, 10000).unwrap();
     }
 
@@ -229,4 +229,3 @@ mod a {
     matrix_test!(rand_operation_10000);
     matrix_test_ignore!(rand_operation_100000);
 }
-

@@ -6,7 +6,6 @@ use clap::{App, Arg};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
-
 fn main() -> Result<(), grebedb::Error> {
     let matches = App::new("GrebeDB insert simulator")
         .arg(
@@ -25,7 +24,7 @@ fn main() -> Result<(), grebedb::Error> {
 
     std::fs::create_dir_all(&path)?;
 
-    let options = grebedb::DatabaseOptions::default();
+    let options = grebedb::Options::default();
     let mut db = grebedb::Database::open_path(path, options)?;
 
     let mut counter = 0u64;
@@ -34,7 +33,9 @@ fn main() -> Result<(), grebedb::Error> {
         let mut rng = XorShiftRng::seed_from_u64(counter);
 
         for _ in 0..rng.gen_range(50..150) {
-            let duration = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+            let duration = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap();
             let ms = duration.as_micros() as u64;
             let key = format!("{:016x}{:016x}", ms, counter);
 

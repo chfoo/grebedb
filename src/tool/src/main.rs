@@ -3,7 +3,7 @@ mod export;
 use std::path::Path;
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
-use grebedb::{Database, DatabaseOpenMode, DatabaseOptions};
+use grebedb::{Database, OpenMode, Options};
 
 fn main() -> anyhow::Result<()> {
     let db_path_arg = Arg::with_name("database_path")
@@ -78,8 +78,8 @@ fn main() -> anyhow::Result<()> {
 fn debug_print_tree_command(database_path: &Path) -> anyhow::Result<()> {
     let mut database = Database::open_path(
         database_path,
-        DatabaseOptions {
-            open_mode: DatabaseOpenMode::ReadOnly,
+        Options {
+            open_mode: OpenMode::ReadOnly,
             ..Default::default()
         },
     )?;

@@ -224,7 +224,7 @@ enum RevisionFlag {
 
 #[derive(Debug, Clone)]
 pub struct PageTableOptions {
-    pub open_mode: OpenMode,
+    pub open_mode: PageOpenMode,
     pub page_cache_size: usize,
     pub keys_per_node: usize,
     pub file_locking: bool,
@@ -235,7 +235,7 @@ pub struct PageTableOptions {
 impl Default for PageTableOptions {
     fn default() -> Self {
         Self {
-            open_mode: OpenMode::default(),
+            open_mode: PageOpenMode::default(),
             page_cache_size: 64,
             keys_per_node: 1024,
             file_locking: true,
@@ -246,14 +246,14 @@ impl Default for PageTableOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OpenMode {
+pub enum PageOpenMode {
     LoadOnly,
     CreateOnly,
     LoadOrCreate,
     ReadOnly,
 }
 
-impl Default for OpenMode {
+impl Default for PageOpenMode {
     fn default() -> Self {
         Self::LoadOrCreate
     }
@@ -306,13 +306,13 @@ where
         };
 
         match options.open_mode {
-            OpenMode::LoadOnly | OpenMode::ReadOnly => {
+            PageOpenMode::LoadOnly | PageOpenMode::ReadOnly => {
                 table.load_and_restore_metadata()?;
             }
-            OpenMode::CreateOnly => {
+            PageOpenMode::CreateOnly => {
                 table.save_new_metadata()?;
             }
-            OpenMode::LoadOrCreate => {
+            PageOpenMode::LoadOrCreate => {
                 if metadata_file_exists {
                     table.load_and_restore_metadata()?;
                 } else {
@@ -692,7 +692,7 @@ where
     }
 
     fn maybe_save_evicted_page(&mut self, evicted_page_info: EvictedPage<T>) -> Result<(), Error> {
-        if self.options.open_mode != OpenMode::ReadOnly && evicted_page_info.modified {
+        if self.options.open_mode != PageOpenMode::ReadOnly && evicted_page_info.modified {
             self.save_evicted_page(evicted_page_info.id, evicted_page_info.page)?;
         }
 
@@ -748,7 +748,7 @@ where
         // 1. Pages that weren't tracked due to being evicted from cache
         // 2. Process crashed after writing metadata, but before all filenames
         //    were promoted
-        if self.options.open_mode != OpenMode::ReadOnly
+        if self.options.open_mode != PageOpenMode::ReadOnly
             && page.revision <= self.counter_tracker.revision_on_persistence()
         {
             self.promote_page_filename(page.id)?;
@@ -778,7 +778,7 @@ where
     }
 
     fn check_if_read_only(&self) -> Result<(), Error> {
-        if let OpenMode::ReadOnly = &self.options.open_mode {
+        if let PageOpenMode::ReadOnly = &self.options.open_mode {
             Err(Error::ReadOnly)
         } else {
             Ok(())
@@ -913,7 +913,7 @@ mod tests {
         let vfs = MemoryVfs::new();
 
         let options = PageTableOptions {
-            open_mode: OpenMode::CreateOnly,
+            open_mode: PageOpenMode::CreateOnly,
             ..Default::default()
         };
 
@@ -927,7 +927,7 @@ mod tests {
         drop(page_table);
 
         let options = PageTableOptions {
-            open_mode: OpenMode::LoadOnly,
+            open_mode: PageOpenMode::LoadOnly,
             ..Default::default()
         };
 
@@ -942,14 +942,14 @@ mod tests {
         let vfs = MemoryVfs::new();
 
         let options = PageTableOptions {
-            open_mode: OpenMode::LoadOnly,
+            open_mode: PageOpenMode::LoadOnly,
             ..Default::default()
         };
 
         assert!(PageTable::<()>::open(Box::new(vfs.clone()), options).is_err());
 
         let options = PageTableOptions {
-            open_mode: OpenMode::CreateOnly,
+            open_mode: PageOpenMode::CreateOnly,
             ..Default::default()
         };
 

@@ -29,7 +29,7 @@ Remember to add the `grebedb` crate dependency to your Cargo.toml.
 A GrebeDB database is stored as multiple files in a directory. The following creates a database using the given path and default options:
 
 ```rust
-let options = DatabaseOptions::default();
+let options = Options::default();
 let mut db = Database::open_path("path/to/empty/directory/", options)?;
 ```
 

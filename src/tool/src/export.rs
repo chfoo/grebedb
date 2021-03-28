@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use grebedb::{Database, DatabaseOpenMode, DatabaseOptions};
+use grebedb::{Database, OpenMode, Options};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 
 const RECORD_SEPARATOR: u8 = 0x1e;
@@ -80,8 +80,8 @@ impl Dumper {
             output_stdout = Some(BufWriter::new(std::io::stdout()));
         };
 
-        let options = DatabaseOptions {
-            open_mode: DatabaseOpenMode::ReadOnly,
+        let options = Options {
+            open_mode: OpenMode::ReadOnly,
             ..Default::default()
         };
         let database = Database::open_path(database_path, options)?;
@@ -135,7 +135,7 @@ impl Dumper {
     fn write_header(&mut self) -> anyhow::Result<()> {
         let database = self.database.take().unwrap();
         let header_row = MetadataRow {
-            key_value_count: database.metadata().key_value_count()
+            key_value_count: database.metadata().key_value_count(),
         };
 
         self.write_row(Row::Metadata(header_row))?;
@@ -194,8 +194,8 @@ struct Loader {
 
 impl Loader {
     fn open(database_path: &Path, input_path: &Path) -> anyhow::Result<Self> {
-        let options = DatabaseOptions {
-            open_mode: DatabaseOpenMode::CreateOnly,
+        let options = Options {
+            open_mode: OpenMode::CreateOnly,
             ..Default::default()
         };
         let database = Database::open_path(database_path, options)?;

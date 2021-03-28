@@ -58,14 +58,14 @@ macro_rules! multiple_config_test {
         multiple_vfs_test!(
             $fn_name,
             "default",
-            grebedb::DatabaseOptions::default(),
+            grebedb::Options::default(),
             $ignore
         );
 
         multiple_vfs_test!(
             $fn_name,
             "small_options",
-            grebedb::DatabaseOptions {
+            grebedb::Options {
                 keys_per_node: 128,
                 page_cache_size: 8,
                 ..Default::default()

@@ -1,11 +1,11 @@
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 use indexmap::IndexSet;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
 #[test]
 fn test_fill_and_random_remove() {
-    let options = DatabaseOptions::default();
+    let options = Options::default();
     let mut db = Database::open_memory(options).unwrap();
 
     let mut keys = IndexSet::new();

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use clap::{App, Arg};
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 use rand::{RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use uuid::Uuid;
@@ -26,7 +26,7 @@ fn main() -> Result<(), grebedb::Error> {
 
     std::fs::create_dir_all(&path)?;
 
-    let options = DatabaseOptions::default();
+    let options = Options::default();
     let mut db = Database::open_path(path, options)?;
 
     let mut counter = 0u64;

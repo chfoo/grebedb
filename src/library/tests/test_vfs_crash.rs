@@ -3,12 +3,12 @@ mod common;
 use std::sync::atomic::Ordering;
 
 use common::CrashingVfs;
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 
 #[test]
 fn test_crash_before_metadata_commit() {
     let vfs = CrashingVfs::new();
-    let options = DatabaseOptions {
+    let options = Options {
         keys_per_node: 128,
         page_cache_size: 4,
         automatic_flush: false,
@@ -39,7 +39,7 @@ fn test_crash_before_metadata_commit() {
     database.flush().unwrap_err();
 
     // Expect old pages with revision flag 0 to be read, and flag 1 to be ignored:
-    let mut database = Database::open(Box::new(vfs), DatabaseOptions::default()).unwrap();
+    let mut database = Database::open(Box::new(vfs), Options::default()).unwrap();
 
     assert_eq!(
         database
@@ -54,7 +54,7 @@ fn test_crash_before_metadata_commit() {
 #[test]
 fn test_crash_after_metadata_commit() {
     let vfs = CrashingVfs::new();
-    let options = DatabaseOptions {
+    let options = Options {
         keys_per_node: 128,
         page_cache_size: 4,
         automatic_flush: false,
@@ -91,7 +91,7 @@ fn test_crash_after_metadata_commit() {
         .store(false, Ordering::Relaxed);
 
     // Expect read new pages in either copy-on-write revision flag 0 or 1:
-    let mut database = Database::open(Box::new(vfs), DatabaseOptions::default()).unwrap();
+    let mut database = Database::open(Box::new(vfs), Options::default()).unwrap();
 
     assert_eq!(
         database

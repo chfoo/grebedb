@@ -2,13 +2,13 @@ mod common;
 
 use grebedb::{
     vfs::{MemoryVfs, ReadOnlyVfs},
-    Database, DatabaseCompressionLevel, DatabaseOpenMode, DatabaseOptions, DatabaseSyncOption,
+    CompressionLevel, Database, OpenMode, Options, SyncOption,
 };
 
 #[test]
 fn test_read_only() -> anyhow::Result<()> {
     let memory_vfs = MemoryVfs::default();
-    let options = DatabaseOptions {
+    let options = Options {
         keys_per_node: 128,
         page_cache_size: 4,
         ..Default::default()
@@ -24,8 +24,8 @@ fn test_read_only() -> anyhow::Result<()> {
     db.flush()?;
     drop(db);
 
-    let options = DatabaseOptions {
-        open_mode: DatabaseOpenMode::ReadOnly,
+    let options = Options {
+        open_mode: OpenMode::ReadOnly,
         keys_per_node: 128,
         page_cache_size: 4,
         ..Default::default()
@@ -49,8 +49,8 @@ fn test_read_only() -> anyhow::Result<()> {
 
 #[test]
 fn test_no_compression() -> anyhow::Result<()> {
-    let options = DatabaseOptions {
-        compression_level: DatabaseCompressionLevel::None,
+    let options = Options {
+        compression_level: CompressionLevel::None,
         ..Default::default()
     };
     let mut db = Database::open_memory(options)?;
@@ -64,7 +64,7 @@ fn test_no_compression() -> anyhow::Result<()> {
 #[test]
 fn test_no_file_locking() -> anyhow::Result<()> {
     let dir = common::make_tempdir();
-    let options = DatabaseOptions {
+    let options = Options {
         file_locking: false,
         ..Default::default()
     };
@@ -79,8 +79,8 @@ fn test_no_file_locking() -> anyhow::Result<()> {
 #[test]
 fn test_no_file_sync() -> anyhow::Result<()> {
     let dir = common::make_tempdir();
-    let options = DatabaseOptions {
-        file_sync: DatabaseSyncOption::None,
+    let options = Options {
+        file_sync: SyncOption::None,
         keys_per_node: 128,
         page_cache_size: 4,
         ..Default::default()

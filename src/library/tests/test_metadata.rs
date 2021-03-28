@@ -1,9 +1,9 @@
-use grebedb::{Database, DatabaseOptions};
+use grebedb::{Database, Options};
 use indexmap::IndexSet;
 
 #[test]
 fn test_metadata() {
-    let options = DatabaseOptions::default();
+    let options = Options::default();
     let mut db = Database::open_memory(options).unwrap();
 
     let mut keys = IndexSet::new();
