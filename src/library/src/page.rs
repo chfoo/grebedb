@@ -355,7 +355,7 @@ where
     }
 
     fn get_(&mut self, page_id: PageId) -> Result<Option<&T>, Error> {
-        assert!(page_id <= self.counter_tracker.id_counter());
+        self.check_page_id_counter_consistency(page_id)?;
 
         if !self.page_tracker.contains_page_in_cache(page_id) {
             self.load_page_into_cache(page_id)?;
@@ -386,7 +386,7 @@ where
     }
 
     fn put_(&mut self, page_id: PageId, content: T) -> Result<(), Error> {
-        assert!(page_id <= self.counter_tracker.id_counter());
+        self.check_page_id_counter_consistency(page_id)?;
 
         let page = Page {
             uuid: self.uuid,
@@ -411,7 +411,7 @@ where
     }
 
     fn update_(&mut self, page_id: PageId) -> Result<Option<PageUpdateGuard<T>>, Error> {
-        assert!(page_id <= self.counter_tracker.id_counter());
+        self.check_page_id_counter_consistency(page_id)?;
 
         if !self.page_tracker.contains_page_in_cache(page_id) {
             self.load_page_into_cache(page_id)?;
@@ -442,7 +442,7 @@ where
     }
 
     fn remove_(&mut self, page_id: PageId) -> Result<(), Error> {
-        assert!(page_id <= self.counter_tracker.id_counter());
+        self.check_page_id_counter_consistency(page_id)?;
 
         let page = Page {
             uuid: self.uuid,
@@ -782,6 +782,17 @@ where
             Err(Error::ReadOnly)
         } else {
             Ok(())
+        }
+    }
+
+    fn check_page_id_counter_consistency(&self, page_id: PageId) -> Result<(), Error> {
+        if page_id <= self.counter_tracker.id_counter() {
+            Ok(())
+        } else {
+            Err(Error::InvalidPageData {
+                page: page_id,
+                message: "requested page beyond id counter",
+            })
         }
     }
 }
