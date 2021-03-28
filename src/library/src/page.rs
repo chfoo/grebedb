@@ -201,7 +201,10 @@ enum RevisionFlag {
 pub struct PageTableOptions {
     pub open_mode: OpenMode,
     pub page_cache_size: usize,
+    pub keys_per_node: usize,
+    pub edit_on_remove: bool,
     pub file_locking: bool,
+    pub compression_level: Option<i32>,
 }
 
 impl Default for PageTableOptions {
@@ -209,7 +212,10 @@ impl Default for PageTableOptions {
         Self {
             open_mode: OpenMode::default(),
             page_cache_size: 64,
+            keys_per_node: 1024,
+            edit_on_remove: true,
             file_locking: true,
+            compression_level: Some(3),
         }
     }
 }
@@ -257,10 +263,13 @@ where
             || vfs.exists(METADATA_COPY_FILENAME)?
             || vfs.exists(METADATA_OLD_FILENAME)?;
 
+        let mut format = Format::default();
+        format.set_compression_level(options.compression_level);
+
         let mut table = Self {
             options: options.clone(),
             vfs,
-            format: Format::default(),
+            format,
             page_tracker: PageTracker::new(options.page_cache_size),
             uuid: Uuid::nil(),
             counter_tracker: CounterTracker::default(),

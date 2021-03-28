@@ -85,8 +85,8 @@ pub struct DatabaseOptions {
     /// modifications accumulate.
     ///
     /// There is no background maintenance thread that does automatic flushing;
-    /// automatic flushing occurs when a database modification operation
-    /// function, such as put() or remove(), is called.
+    /// automatic flushing occurs when a database modifying function,
+    /// such as put() or remove(), is called.
     pub automatic_flush: bool,
 
     /// Number of modifications required for automatic flush to be considered.
@@ -96,6 +96,9 @@ pub struct DatabaseOptions {
     /// or the threshold × 2 is reached after 60 seconds,
     /// a flush is scheduled to be performed on the next modification.
     pub automatic_flush_threshold: usize,
+
+    /// Compression level for each page. Default: Fast.
+    pub compression_level: DatabaseCompressionLevel,
 }
 
 impl Default for DatabaseOptions {
@@ -108,6 +111,7 @@ impl Default for DatabaseOptions {
             file_locking: true,
             automatic_flush: true,
             automatic_flush_threshold: 2048,
+            compression_level: DatabaseCompressionLevel::default(),
         }
     }
 }
@@ -135,6 +139,9 @@ impl From<DatabaseOptions> for PageTableOptions {
             open_mode: options.open_mode.into(),
             page_cache_size: options.page_cache_size,
             file_locking: options.file_locking,
+            keys_per_node: options.keys_per_node,
+            edit_on_remove: options.edit_tree_on_remove,
+            compression_level: options.compression_level.to_zstd(),
         }
     }
 }
@@ -169,6 +176,45 @@ impl From<DatabaseOpenMode> for OpenMode {
     }
 }
 
+/// Database data compression level.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DatabaseCompressionLevel {
+    /// Disable compression.
+    None,
+
+    /// Fast compression speeds at the expense of lower compression ratios.
+    ///
+    /// Currently, this corresponds to Zstandard level 3.
+    Low,
+
+    /// Higher compression ratios at the expense of slower compression speeds.
+    ///
+    /// Currently, this corresponds to Zstandard level 9.
+    Medium,
+
+    /// Best compression ratios at the expense of very slow compression speeds.
+    ///
+    /// Currently, this corresponds to Zstandard level 19.
+    High,
+}
+
+impl Default for DatabaseCompressionLevel {
+    fn default() -> Self {
+        Self::Low
+    }
+}
+
+impl DatabaseCompressionLevel {
+    fn to_zstd(&self) -> Option<i32> {
+        match self {
+            Self::None => None,
+            Self::Low => Some(3),
+            Self::Medium => Some(9),
+            Self::High => Some(19),
+        }
+    }
+}
+
 /// GrebeDB database interface.
 pub struct Database {
     options: DatabaseOptions,
@@ -187,12 +233,7 @@ impl Database {
             vfs
         };
 
-        let mut tree = Tree::open(
-            vfs,
-            options.clone().into(),
-            options.keys_per_node,
-            options.edit_tree_on_remove,
-        )?;
+        let mut tree = Tree::open(vfs, options.clone().into())?;
 
         match options.open_mode {
             DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => {

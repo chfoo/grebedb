@@ -1,6 +1,8 @@
+mod common;
+
 use grebedb::{
     vfs::{MemoryVfs, ReadOnlyVfs},
-    Database, DatabaseOpenMode, DatabaseOptions,
+    Database, DatabaseCompressionLevel, DatabaseOpenMode, DatabaseOptions,
 };
 
 #[test]
@@ -41,6 +43,35 @@ fn test_read_only() -> anyhow::Result<()> {
         let key = format!("key:{:016x}", num);
         db.get(key)?;
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_no_compression() -> anyhow::Result<()> {
+    let options = DatabaseOptions {
+        compression_level: DatabaseCompressionLevel::None,
+        ..Default::default()
+    };
+    let mut db = Database::open_memory(options)?;
+
+    db.put("my key", "hello world")?;
+    db.flush()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_no_file_locking() -> anyhow::Result<()> {
+    let dir = common::make_tempdir();
+    let options = DatabaseOptions {
+        file_locking:false,
+        ..Default::default()
+    };
+    let mut db = Database::open_path(dir.path(), options)?;
+
+    db.put("my key", "hello world")?;
+    db.flush()?;
 
     Ok(())
 }

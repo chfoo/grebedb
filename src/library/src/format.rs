@@ -31,6 +31,10 @@ impl Default for Format {
 }
 
 impl Format {
+    pub fn set_compression_level(&mut self, value: Option<i32>) {
+        self.compression_level = value;
+    }
+
     pub fn read_file<'de, T>(&mut self, vfs: &mut dyn Vfs, path: &str) -> Result<T, Error>
     where
         T: Deserialize<'de>,

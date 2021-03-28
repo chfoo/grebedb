@@ -355,15 +355,13 @@ impl Tree {
     pub fn open(
         vfs: Box<dyn Vfs + Sync + Send>,
         page_table_options: PageTableOptions,
-        keys_per_node: usize,
-        edit_on_remove: bool,
     ) -> Result<Self, Error> {
-        assert!(keys_per_node >= 2);
+        assert!(page_table_options.keys_per_node >= 2);
 
         Ok(Self {
+            keys_per_node: page_table_options.keys_per_node,
+            edit_on_remove: page_table_options.edit_on_remove,
             page_table: PageTable::open(vfs, page_table_options)?,
-            keys_per_node,
-            edit_on_remove,
         })
     }
 
@@ -453,14 +451,14 @@ impl Tree {
 
         if num_keys == 0 && self.edit_on_remove {
             self.remove_leaf_node(page_id, &mut node_path)?;
-
-            // At this point, lazy deletion has occurred. But the invariants
-            // of a traditional B+ tree is invalidated and the tree is
-            // not balanced.
-
-            // TODO: an operation that traverses the tree to rebalence itself
-            // could be done here
         }
+
+        // At this point, lazy deletion has occurred. But the invariants
+        // of a traditional B+ tree is invalidated and the tree is
+        // not balanced.
+
+        // TODO: an operation that traverses the tree to re-balance itself
+        // could be done here
 
         Ok(())
     }
