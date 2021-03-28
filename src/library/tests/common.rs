@@ -72,16 +72,6 @@ macro_rules! multiple_config_test {
             },
             $ignore
         );
-
-        multiple_vfs_test!(
-            $fn_name,
-            "edit_tree_on_remove",
-            grebedb::DatabaseOptions {
-                edit_tree_on_remove: false,
-                ..Default::default()
-            },
-            $ignore
-        );
     };
 }
 

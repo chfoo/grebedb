@@ -57,19 +57,6 @@ pub struct DatabaseOptions {
     /// the tree is rebalanced.
     pub keys_per_node: usize,
 
-    /// Whether removal of key-values manipulates the tree. Default: true
-    ///
-    /// When this option is true, the nodes in the tree may be changed
-    /// and unused pages are marked as free for reuse.
-    /// This is recommended if your application regularly removes keys in
-    /// a sequential manner. This option avoids many unused files.
-    ///
-    /// When this option is false, empty leaf nodes remain and the internal
-    /// nodes of the tree are untouched. This behavior may improve performance
-    /// by skipping tree manipulations if your application rarely removes
-    /// key-value pairs.
-    pub edit_tree_on_remove: bool,
-
     /// Number of pages held in memory cache. Default: 64.
     pub page_cache_size: usize,
 
@@ -106,7 +93,6 @@ impl Default for DatabaseOptions {
         Self {
             open_mode: DatabaseOpenMode::default(),
             keys_per_node: 1024,
-            edit_tree_on_remove: true,
             page_cache_size: 64,
             file_locking: true,
             automatic_flush: true,
@@ -140,7 +126,6 @@ impl From<DatabaseOptions> for PageTableOptions {
             page_cache_size: options.page_cache_size,
             file_locking: options.file_locking,
             keys_per_node: options.keys_per_node,
-            edit_on_remove: options.edit_tree_on_remove,
             compression_level: options.compression_level.to_zstd(),
         }
     }

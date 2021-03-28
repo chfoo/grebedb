@@ -212,7 +212,6 @@ pub struct PageTableOptions {
     pub open_mode: OpenMode,
     pub page_cache_size: usize,
     pub keys_per_node: usize,
-    pub edit_on_remove: bool,
     pub file_locking: bool,
     pub compression_level: Option<i32>,
 }
@@ -223,7 +222,6 @@ impl Default for PageTableOptions {
             open_mode: OpenMode::default(),
             page_cache_size: 64,
             keys_per_node: 1024,
-            edit_on_remove: true,
             file_locking: true,
             compression_level: Some(3),
         }

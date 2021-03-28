@@ -358,7 +358,6 @@ impl Debug for LeafNode {
 pub struct Tree {
     page_table: PageTable<Node, TreeMetadata>,
     keys_per_node: usize,
-    edit_on_remove: bool,
 }
 
 impl Tree {
@@ -370,7 +369,6 @@ impl Tree {
 
         Ok(Self {
             keys_per_node: page_table_options.keys_per_node,
-            edit_on_remove: page_table_options.edit_on_remove,
             page_table: PageTable::open(vfs, page_table_options)?,
         })
     }
@@ -481,7 +479,7 @@ impl Tree {
             self.decrement_key_value_count();
         }
 
-        if num_keys == 0 && self.edit_on_remove {
+        if num_keys == 0 {
             self.remove_leaf_node(page_id, &mut node_path)?;
         }
 
