@@ -27,12 +27,13 @@ pub struct Page<T> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Metadata {
+pub struct Metadata<M> {
     pub uuid: Uuid, // uuid for the entire database
     pub revision: RevisionId,
     pub id_counter: PageId, // current allocated ID
     pub free_id_list: Vec<PageId>,
     pub root_id: Option<PageId>,
+    pub auxiliary: Option<M>,
 }
 
 struct PageTracker<T> {
@@ -234,9 +235,10 @@ impl Default for OpenMode {
     }
 }
 
-pub struct PageTable<T>
+pub struct PageTable<T, M = ()>
 where
     T: Serialize + DeserializeOwned,
+    M: Serialize + DeserializeOwned + Clone,
 {
     options: PageTableOptions,
     vfs: Box<dyn Vfs + Sync + Send>,
@@ -245,11 +247,13 @@ where
     counter_tracker: CounterTracker,
     uuid: Uuid,
     closed: bool,
+    auxiliary_metadata: Option<M>,
 }
 
-impl<T> PageTable<T>
+impl<T, M> PageTable<T, M>
 where
     T: Serialize + DeserializeOwned,
+    M: Serialize + DeserializeOwned + Clone,
 {
     pub fn open(
         mut vfs: Box<dyn Vfs + Sync + Send>,
@@ -274,6 +278,7 @@ where
             uuid: Uuid::nil(),
             counter_tracker: CounterTracker::default(),
             closed: false,
+            auxiliary_metadata: None,
         };
 
         match options.open_mode {
@@ -305,6 +310,18 @@ where
 
     pub fn new_page_id(&mut self) -> PageId {
         self.counter_tracker.new_page_id()
+    }
+
+    pub fn auxiliary_metadata(&self) -> Option<&M> {
+        self.auxiliary_metadata.as_ref()
+    }
+
+    pub fn auxiliary_metadata_mut(&mut self) -> Option<&mut M> {
+        self.auxiliary_metadata.as_mut()
+    }
+
+    pub fn set_auxiliary_metadata(&mut self, value: Option<M>) {
+        self.auxiliary_metadata = value;
     }
 
     pub fn get(&mut self, page_id: PageId) -> Result<Option<&T>, Error> {
@@ -449,7 +466,7 @@ where
     }
 
     fn load_and_restore_metadata(&mut self) -> Result<(), Error> {
-        let metadata: Metadata = self
+        let metadata: Metadata<M> = self
             .format
             .read_file(self.vfs.as_mut(), &METADATA_FILENAME)?;
 
@@ -461,6 +478,8 @@ where
             metadata.id_counter,
             &metadata.free_id_list,
         );
+
+        self.auxiliary_metadata = metadata.auxiliary;
 
         // TODO: the copy backup file could be read if the main metadata file
         // is unreadable
@@ -603,6 +622,7 @@ where
                 .iter()
                 .cloned()
                 .collect(),
+            auxiliary: self.auxiliary_metadata.clone(),
         };
 
         self.format
@@ -714,9 +734,10 @@ where
     }
 }
 
-impl<T> Drop for PageTable<T>
+impl<T, M> Drop for PageTable<T, M>
 where
     T: Serialize + DeserializeOwned,
+    M: Serialize + DeserializeOwned + Clone,
 {
     fn drop(&mut self) {
         if self.options.file_locking {
@@ -844,7 +865,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut page_table = PageTable::open(Box::new(vfs.clone()), options).unwrap();
+        let mut page_table = PageTable::<i32>::open(Box::new(vfs.clone()), options).unwrap();
 
         let page_id = page_table.new_page_id();
         page_table.put(page_id, 789).unwrap();
@@ -858,7 +879,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut page_table = PageTable::open(Box::new(vfs), options).unwrap();
+        let mut page_table = PageTable::<i32>::open(Box::new(vfs), options).unwrap();
 
         let content = page_table.get(page_id).unwrap();
         assert_eq!(content.cloned(), Some(789));
@@ -889,7 +910,8 @@ mod tests {
     #[test]
     fn test_page_table_get_put() {
         let vfs = MemoryVfs::new();
-        let mut page_table = PageTable::open(Box::new(vfs), PageTableOptions::default()).unwrap();
+        let mut page_table =
+            PageTable::<i32>::open(Box::new(vfs), PageTableOptions::default()).unwrap();
 
         let page_id = page_table.new_page_id();
 
@@ -909,7 +931,7 @@ mod tests {
     fn test_page_table_update() {
         let vfs = MemoryVfs::new();
         let mut page_table =
-            PageTable::open(Box::new(vfs.clone()), PageTableOptions::default()).unwrap();
+            PageTable::<i32>::open(Box::new(vfs.clone()), PageTableOptions::default()).unwrap();
 
         let page_id = page_table.new_page_id();
 
@@ -927,7 +949,8 @@ mod tests {
 
         drop(page_table);
 
-        let mut page_table = PageTable::open(Box::new(vfs), PageTableOptions::default()).unwrap();
+        let mut page_table =
+            PageTable::<i32>::open(Box::new(vfs), PageTableOptions::default()).unwrap();
 
         let content = page_table.get(page_id).unwrap();
         assert_eq!(content.cloned(), Some(123));
@@ -936,7 +959,8 @@ mod tests {
     #[test]
     fn test_page_table_many_on_single_page() {
         let vfs = MemoryVfs::new();
-        let mut page_table = PageTable::open(Box::new(vfs), PageTableOptions::default()).unwrap();
+        let mut page_table =
+            PageTable::<i32>::open(Box::new(vfs), PageTableOptions::default()).unwrap();
 
         let page_id = page_table.new_page_id();
 
@@ -952,7 +976,8 @@ mod tests {
     #[test]
     fn test_page_table_many_pages() {
         let vfs = MemoryVfs::new();
-        let mut page_table = PageTable::open(Box::new(vfs), PageTableOptions::default()).unwrap();
+        let mut page_table =
+            PageTable::<u64>::open(Box::new(vfs), PageTableOptions::default()).unwrap();
 
         let mut first_page_id = None;
 
@@ -976,7 +1001,8 @@ mod tests {
     #[test]
     fn test_page_table_remove() {
         let vfs = MemoryVfs::new();
-        let mut page_table = PageTable::open(Box::new(vfs), PageTableOptions::default()).unwrap();
+        let mut page_table =
+            PageTable::<i32>::open(Box::new(vfs), PageTableOptions::default()).unwrap();
 
         let page_id = page_table.new_page_id();
         let page_id_2 = page_table.new_page_id();

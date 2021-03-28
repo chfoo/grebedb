@@ -8,6 +8,11 @@ use crate::{
     vfs::Vfs,
 };
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct TreeMetadata {
+    pub key_value_count: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Node {
@@ -290,24 +295,29 @@ impl LeafNode {
         (&self.keys[index], &self.values[index])
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
         assert!(self.keys.len() == self.values.len());
 
         match self.search(&key) {
             Ok(index) => {
                 self.values[index] = value;
+                true
             }
             Err(index) => {
                 self.keys.insert(index, key);
                 self.values.insert(index, value);
+                false
             }
         }
     }
 
-    pub fn remove_key(&mut self, key: &[u8]) {
+    pub fn remove_key(&mut self, key: &[u8]) -> bool {
         if let Ok(index) = self.search(key) {
             self.keys.remove(index);
             self.values.remove(index);
+            true
+        } else {
+            false
         }
     }
 
@@ -346,7 +356,7 @@ impl Debug for LeafNode {
 }
 
 pub struct Tree {
-    page_table: PageTable<Node>,
+    page_table: PageTable<Node, TreeMetadata>,
     keys_per_node: usize,
     edit_on_remove: bool,
 }
@@ -375,6 +385,19 @@ impl Tree {
         }
 
         Ok(())
+    }
+
+    pub fn upgrade(&mut self)  -> Result<(), Error> {
+        if self.page_table.auxiliary_metadata().is_none() {
+            self.page_table
+                .set_auxiliary_metadata(Some(TreeMetadata::default()))
+        }
+
+        Ok(())
+    }
+
+    pub fn metadata(&self) -> Option<&TreeMetadata> {
+        self.page_table.auxiliary_metadata()
     }
 
     pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error> {
@@ -415,18 +438,23 @@ impl Tree {
         let mut node_path = Vec::new();
 
         if let Some(page_id) = self.find_leaf_node(&key, Some(&mut node_path))? {
-            let num_keys = {
+            let (num_keys, replaced) = {
                 let mut leaf_node_ = self.edit_node(page_id)?;
                 let leaf_node = leaf_node_.leaf_mut(page_id)?;
 
-                leaf_node.insert(key, value);
-                leaf_node.len()
+                let replaced = leaf_node.insert(key, value);
+                (leaf_node.len(), replaced)
             };
+
+            if !replaced {
+                self.increment_key_value_count();
+            }
 
             if num_keys > keys_per_node {
                 self.split_leaf_node(page_id, &mut node_path)?;
             }
         } else {
+            self.increment_key_value_count();
             self.add_new_root_leaf_node(key, value)?;
         };
 
@@ -441,13 +469,17 @@ impl Tree {
             None => return Ok(()),
         };
 
-        let num_keys = {
+        let (num_keys, found) = {
             let mut leaf_node_ = self.edit_node(page_id)?;
             let leaf_node = leaf_node_.leaf_mut(page_id)?;
 
-            leaf_node.remove_key(key);
-            leaf_node.len()
+            let found = leaf_node.remove_key(key);
+            (leaf_node.len(), found)
         };
+
+        if found {
+            self.decrement_key_value_count();
+        }
 
         if num_keys == 0 && self.edit_on_remove {
             self.remove_leaf_node(page_id, &mut node_path)?;
@@ -870,6 +902,18 @@ impl Tree {
         // { current } => { }  (removal of leaf that is also root node)
 
         Ok(())
+    }
+
+    fn increment_key_value_count(&mut self) {
+        if let Some(mut meta) = self.page_table.auxiliary_metadata_mut() {
+            meta.key_value_count += 1;
+        }
+    }
+
+    fn decrement_key_value_count(&mut self) {
+        if let Some(mut meta) = self.page_table.auxiliary_metadata_mut() {
+            meta.key_value_count = meta.key_value_count.saturating_sub(1);
+        }
     }
 }
 

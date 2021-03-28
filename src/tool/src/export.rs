@@ -19,7 +19,9 @@ enum Row {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-struct MetadataRow {}
+struct MetadataRow {
+    pub key_value_count: u64,
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct KeyValueRow {
@@ -131,8 +133,16 @@ impl Dumper {
     }
 
     fn write_header(&mut self) -> anyhow::Result<()> {
-        let header_row = MetadataRow {};
-        self.write_row(Row::Metadata(header_row))
+        let database = self.database.take().unwrap();
+        let header_row = MetadataRow {
+            key_value_count: database.metadata().key_value_count()
+        };
+
+        self.write_row(Row::Metadata(header_row))?;
+
+        self.database = Some(database);
+
+        Ok(())
     }
     fn write_footer(&mut self) -> anyhow::Result<()> {
         self.write_row(Row::Eof)

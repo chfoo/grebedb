@@ -39,7 +39,7 @@ use std::{
 pub use crate::error::Error;
 use crate::format::Format;
 use crate::page::{Metadata, OpenMode, Page, PageTableOptions};
-use crate::tree::{Node, Tree, TreeCursor};
+use crate::tree::{Node, Tree, TreeCursor, TreeMetadata};
 use crate::vfs::{MemoryVfs, OsVfs, ReadOnlyVfs, Vfs};
 
 /// Type alias for an owned key-value pair.
@@ -237,7 +237,11 @@ impl Database {
 
         match options.open_mode {
             DatabaseOpenMode::CreateOnly | DatabaseOpenMode::LoadOrCreate => {
-                tree.init_if_empty()?
+                tree.init_if_empty()?;
+                tree.upgrade()?;
+            }
+            DatabaseOpenMode::LoadOnly => {
+                tree.upgrade()?;
             }
             _ => {}
         }
@@ -269,6 +273,13 @@ impl Database {
         P: Into<PathBuf>,
     {
         Self::open(Box::new(OsVfs::new(root_path)), options)
+    }
+
+    /// Return database metadata information.
+    pub fn metadata(&self) -> DatabaseMetadata {
+        DatabaseMetadata {
+            tree_metadata: self.tree.metadata(),
+        }
     }
 
     /// Return whether the key exists.
@@ -492,6 +503,23 @@ impl<'a> Debug for DatabaseCursor<'a> {
     }
 }
 
+#[derive(Debug)]
+/// Additional non-critical information associated with the database.
+pub struct DatabaseMetadata<'a> {
+    tree_metadata: Option<&'a TreeMetadata>,
+}
+
+impl<'a> DatabaseMetadata<'a> {
+    /// Return the approximate number of key-value pairs in the database.
+    pub fn key_value_count(&self) -> u64 {
+        if let Some(meta) = self.tree_metadata {
+            meta.key_value_count
+        } else {
+            0
+        }
+    }
+}
+
 struct FlushTracker {
     base_threshold: usize,
     modification_count: usize,
@@ -535,7 +563,7 @@ pub fn debug_print_page(path: &Path) -> Result<(), Error> {
     let filename = path.file_name().unwrap().to_str().unwrap();
 
     if filename.contains("meta") {
-        let payload: Metadata = format.read_file(&mut vfs, filename)?;
+        let payload: Metadata<TreeMetadata> = format.read_file(&mut vfs, filename)?;
 
         eprintln!("{:?}", payload);
     } else {

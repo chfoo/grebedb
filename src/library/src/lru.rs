@@ -53,9 +53,15 @@ where
     }
 
     /// Move an item to the front.
-    pub fn touch(&mut self, item: &T) {
-        self.find_and_update(item);
-        self.sort_items();
+    ///
+    /// Returns whether the item exists.
+    pub fn touch(&mut self, item: &T) -> bool {
+        if self.find_and_update(item) {
+            self.sort_items();
+            true
+        } else {
+            false
+        }
     }
 
     /// Remove all items and returns them.
@@ -89,7 +95,7 @@ where
     }
 
     #[cfg(test)]
-    pub(in crate::lru) fn item_at(&self, index:usize) -> Option<&T> {
+    pub(in crate::lru) fn item_at(&self, index: usize) -> Option<&T> {
         let entry = self.entries.get(index)?;
         Some(&entry.1)
     }
@@ -103,7 +109,7 @@ mod tests {
     fn test_lru_vec() {
         let mut lru = LruVec::<u32>::new(3);
 
-        lru.touch(&1);
+        assert!(!lru.touch(&1));
 
         assert!(lru.insert(1).is_none()); // [1]
         assert!(lru.insert(2).is_none()); // [2, 1]
@@ -118,7 +124,7 @@ mod tests {
         assert_eq!(lru.item_at(1), Some(&3));
         assert_eq!(lru.item_at(2), Some(&2));
 
-        lru.touch(&3); // [3, 4, 2]
+        assert!(lru.touch(&3)); // [3, 4, 2]
 
         assert_eq!(lru.item_at(0), Some(&3));
         assert_eq!(lru.item_at(1), Some(&4));

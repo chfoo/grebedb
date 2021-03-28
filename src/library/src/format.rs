@@ -4,7 +4,7 @@ use relative_path::RelativePath;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, vfs::Vfs};
+use crate::{error::Error, lru::LruVec, vfs::Vfs};
 
 const MAGIC_BYTES: [u8; 8] = [0xFE, b'G', b'r', b'e', b'b', b'e', 0x00, 0x00];
 
@@ -13,6 +13,7 @@ pub struct Format {
     page_buffer: Vec<u8>,
     payload_buffer: Vec<u8>,
     compression_level: Option<i32>,
+    dir_create_cache: LruVec<String>,
 }
 
 impl Default for Format {
@@ -26,6 +27,7 @@ impl Default for Format {
             } else {
                 None
             },
+            dir_create_cache: LruVec::new(8),
         }
     }
 }
@@ -85,7 +87,12 @@ impl Format {
         }
 
         let rel_path = RelativePath::new(path);
-        vfs.create_dir_all(rel_path.parent().unwrap().as_str())?;
+        let dir_path = rel_path.parent().unwrap();
+
+        if !self.is_in_dir_cache(dir_path) {
+            vfs.create_dir_all(dir_path.as_str())?;
+        }
+
         vfs.write_and_sync_all(path, &self.file_buffer)?;
 
         Ok(())
@@ -128,6 +135,17 @@ impl Format {
         #[cfg(not(feature = "zstd"))]
         {
             Err(Error::CompressionUnavailable)
+        }
+    }
+
+    fn is_in_dir_cache(&mut self, dir_path: &RelativePath) -> bool {
+        let dir_path = dir_path.to_string();
+
+        if !self.dir_create_cache.touch(&dir_path) {
+            self.dir_create_cache.insert(dir_path);
+            false
+        } else {
+            true
         }
     }
 
