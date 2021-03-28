@@ -70,10 +70,19 @@ impl<T> PageTracker<T> {
         self.cached_pages.get(&page_id)
     }
 
+    pub fn get_from_cache_without_touch(&mut self, page_id: PageId) -> Option<&Page<T>> {
+        self.cached_pages.get(&page_id)
+    }
+
     pub fn get_from_cache_mut(&mut self, page_id: PageId) -> Option<&mut Page<T>> {
         self.lru.touch(&page_id);
         self.modified_pages.insert(page_id);
         self.cached_pages.get_mut(&page_id)
+    }
+
+    pub fn set_page_revision(&mut self, page_id: PageId, revision: RevisionId) {
+        let mut page = self.cached_pages.get_mut(&page_id).unwrap();
+        page.revision = revision;
     }
 
     #[must_use]
@@ -599,7 +608,10 @@ where
         let path_1 = make_path(page_id, RevisionFlag::New);
         let path_1_temp = format!("{}.tmp", &path_1);
 
-        let page = self.page_tracker.get_from_cache(page_id).unwrap();
+        let page = self
+            .page_tracker
+            .get_from_cache_without_touch(page_id)
+            .unwrap();
         self.format
             .write_file(self.vfs.as_mut(), &path_1_temp, page)?;
 
@@ -663,6 +675,9 @@ where
         let page_ids: Vec<PageId> = self.page_tracker.modified_pages().iter().cloned().collect();
 
         for page_id in page_ids {
+            self.page_tracker
+                .set_page_revision(page_id, self.counter_tracker.revision());
+
             self.save_page_from_cache(page_id)?;
         }
 
@@ -981,6 +996,7 @@ mod tests {
 
         let mut first_page_id = None;
 
+        // `num` must be bigger than page cache size
         for num in 0..100 {
             let page_id = page_table.new_page_id();
 

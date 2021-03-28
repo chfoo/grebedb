@@ -11,6 +11,7 @@ fn test_crash_before_metadata_commit() {
     let options = DatabaseOptions {
         keys_per_node: 128,
         page_cache_size: 4,
+        automatic_flush: false,
         ..Default::default()
     };
     let mut database = Database::open(Box::new(vfs.clone()), options).unwrap();
@@ -29,7 +30,8 @@ fn test_crash_before_metadata_commit() {
         database.get(format!("key:{:04x}", num)).unwrap();
     }
 
-    database.put("key:0000", "new value").unwrap();
+    database.put("key:0000", "new value").unwrap(); // a key near start
+    database.put("key:07A0", "new value").unwrap(); // a key near end
 
     // New copy-on-write pages should be written successfully,
     // the metadata should fail to be renamed
@@ -46,6 +48,7 @@ fn test_crash_before_metadata_commit() {
             .map(|item| String::from_utf8(item).unwrap()),
         Some("hello world".to_string())
     );
+    assert_eq!(database.get("key:07A0").unwrap(), None);
 }
 
 #[test]
@@ -54,6 +57,7 @@ fn test_crash_after_metadata_commit() {
     let options = DatabaseOptions {
         keys_per_node: 128,
         page_cache_size: 4,
+        automatic_flush: false,
         ..Default::default()
     };
     let mut database = Database::open(Box::new(vfs.clone()), options).unwrap();
@@ -72,7 +76,8 @@ fn test_crash_after_metadata_commit() {
         database.get(format!("key:{:04x}", num)).unwrap();
     }
 
-    database.put("key:0000", "new value").unwrap();
+    database.put("key:0000", "new value").unwrap(); // a key near start
+    database.put("key:07A0", "new value").unwrap(); // a key near end
 
     // New copy-on-write pages should be written successfully,
     // the metadata should to be renamed successfully,
@@ -91,6 +96,13 @@ fn test_crash_after_metadata_commit() {
     assert_eq!(
         database
             .get("key:0000")
+            .unwrap()
+            .map(|item| String::from_utf8(item).unwrap()),
+        Some("new value".to_string())
+    );
+    assert_eq!(
+        database
+            .get("key:07A0")
             .unwrap()
             .map(|item| String::from_utf8(item).unwrap()),
         Some("new value".to_string())
