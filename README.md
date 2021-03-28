@@ -63,11 +63,11 @@ For more information, check the [src/library/examples](src/library/examples) dir
 
 ### Features
 
-By default, the `zstd` crate is enabled for compression and the `fslock` crate is for cross-platform file locking. To disable them, use `default-features = false` in your Cargo.toml file.
+By default, the `zstd` crate is enabled for compression, `fslock` is for cross-platform file locking, and `getrandom` is a dependency for `uuid`. To disable them, use `default-features = false` in your Cargo.toml file.
 
 ## Tool
 
-A command-line tool to provide basic manipulation (such as import, export) is available.
+A command-line tool to provide basic manipulation (such as import, export) and debugging is available.
 
 Run `cargo install grebedb-tool` to install the tool to `$HOME/.cargo/bin`, then run `grebedb-tool --help` to show program options.
 

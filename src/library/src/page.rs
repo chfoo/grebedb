@@ -10,6 +10,7 @@ use crate::{
     error::Error,
     format::Format,
     lru::LruVec,
+    system::UuidGenerator,
     vfs::{Vfs, VfsSyncOption},
 };
 
@@ -269,6 +270,7 @@ where
     format: Format,
     page_tracker: PageTracker<T>,
     counter_tracker: CounterTracker,
+    uuid_generator: UuidGenerator,
     uuid: Uuid,
     closed: bool,
     auxiliary_metadata: Option<M>,
@@ -301,6 +303,7 @@ where
             page_tracker: PageTracker::new(options.page_cache_size),
             uuid: Uuid::nil(),
             counter_tracker: CounterTracker::default(),
+            uuid_generator: UuidGenerator::new(),
             closed: false,
             auxiliary_metadata: None,
         };
@@ -512,7 +515,7 @@ where
     }
 
     fn save_new_metadata(&mut self) -> Result<(), Error> {
-        self.uuid = Uuid::new_v4();
+        self.uuid = self.uuid_generator.new_uuid();
 
         // We check for the backup file too in case the main file disappears
         if self.vfs.exists(METADATA_FILENAME)?

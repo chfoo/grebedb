@@ -21,12 +21,14 @@
 //! For important details, such as limitations and guarantees, see the
 //! README.md file in the project's source code repository.
 
+#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod error;
 mod format;
 mod lru;
 mod page;
+mod system;
 mod tree;
 pub mod vfs;
 

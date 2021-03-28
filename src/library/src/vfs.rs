@@ -1,6 +1,9 @@
 //! Virtual file system interface for database storage.
 
-use std::{collections::HashMap, fmt::Debug, io::Write, path::PathBuf};
+use std::{fmt::Debug, io::Write, path::PathBuf};
+
+#[cfg(feature = "fslock")]
+use std::collections::HashMap;
 
 use relative_path::{RelativePath, RelativePathBuf};
 use vfs::{MemoryFS, VfsFileType, VfsPath};
@@ -286,7 +289,7 @@ impl Vfs for OsVfs {
     }
 
     #[cfg(not(feature = "fslock"))]
-    fn unlock(&mut self, path: &str) -> Result<(), Error> {
+    fn unlock(&mut self, _path: &str) -> Result<(), Error> {
         Err(Error::FileLockingUnavailable)
     }
 

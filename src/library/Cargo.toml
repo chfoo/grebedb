@@ -8,10 +8,12 @@ repository = "https://github.com/chfoo/grebedb/"
 license = "MPL-2.0"
 keywords = ["database", "key-value-store"]
 categories = ["database-implementations"]
-publish = false
 
 [features]
-default = ["zstd", "fslock"]
+default = ["compression", "file_locking", "system"]
+compression = ["zstd"]
+file_locking = ["fslock"]
+system = ["uuid/v4"]
 
 [dependencies]
 crc32c = "0.6"
@@ -20,7 +22,7 @@ rmp-serde = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 thiserror = "1.0"
-uuid = { version = "0.8", features = ["serde", "v4"] }
+uuid = { version = "0.8", features = ["serde"] }
 vfs = "0.5"
 zstd = { version = "0.6", optional = true }
 

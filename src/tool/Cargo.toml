@@ -8,10 +8,17 @@ repository = "https://github.com/chfoo/grebedb/"
 license = "MPL-2.0"
 keywords = ["database", "key-value-store"]
 categories = ["command-line-utilities"]
-publish = false
+
+[features]
+default = ["compression", "file_locking", "system"]
+compression = ["grebedb/compression"]
+file_locking = ["grebedb/file_locking"]
+system = ["grebedb/system"]
 
 [dependencies.grebedb]
+version = "0.1"
 path = "../library"
+default-features = false
 
 [dependencies]
 anyhow = "1.0"

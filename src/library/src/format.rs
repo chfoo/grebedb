@@ -170,6 +170,7 @@ impl Format {
         }
         #[cfg(not(feature = "zstd"))]
         {
+            let _ = source;
             Err(Error::CompressionUnavailable)
         }
     }
