@@ -72,6 +72,17 @@ macro_rules! multiple_config_test {
             },
             $ignore
         );
+
+        multiple_vfs_test!(
+            $fn_name,
+            "tiny_options",
+            grebedb::Options {
+                keys_per_node: 16,
+                page_cache_size: 8,
+                ..Default::default()
+            },
+            $ignore
+        );
     };
 }
 

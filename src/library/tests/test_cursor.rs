@@ -7,7 +7,7 @@ fn cursor_sequential(mut database: Database) -> Result<(), Error> {
         let key = format!("{:08x}", num);
         let value = format!("hello world {}", num);
 
-        database.put(key.clone(), value.clone())?;
+        database.put(key, value)?;
     }
 
     let cursor = database.cursor();
@@ -26,12 +26,63 @@ fn cursor_sequential(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
+fn cursor_iter_manual(mut database: Database) -> Result<(), Error> {
+    for num in 0..500 {
+        let key = format!("{:08x}", num);
+        let value = format!("hello world {}", num);
+
+        database.put(key, value)?;
+    }
+
+    let mut cursor = database.cursor();
+    let mut count = 0;
+
+    while let Some((key, value)) = cursor.next() {
+        assert!(!key.is_empty());
+        assert!(!value.is_empty());
+        assert!(cursor.error().is_none());
+        count += 1;
+    }
+
+    assert_eq!(count, 500);
+
+    Ok(())
+}
+
+fn cursor_next_buf(mut database: Database) -> Result<(), Error> {
+    for num in 0..500 {
+        let key = format!("{:08x}", num);
+        let value = format!("hello world {}", num);
+
+        database.put(key, value)?;
+    }
+
+    let mut cursor = database.cursor();
+    let mut count = 0;
+    let mut key = Vec::new();
+    let mut value = Vec::new();
+
+    while cursor.next_buf(&mut key, &mut value)? {
+        let expected_key = format!("{:08x}", count);
+        let expected_value = format!("hello world {}", count);
+
+        assert_eq!(key, expected_key.as_bytes());
+        assert_eq!(value, expected_value.as_bytes());
+
+        count += 1;
+    }
+
+    assert_eq!(count, 500);
+
+    Ok(())
+}
+
 fn cursor_removed_items(mut database: Database) -> Result<(), Error> {
     for num in 0..10000 {
         let key = format!("{:08x}", num);
         let value = format!("hello world {}", num);
 
-        database.put(key.clone(), value.clone())?;
+        database.put(key, value)?;
     }
 
     for num in 0..10000 {
@@ -75,7 +126,8 @@ fn cursor_range(mut database: Database) -> Result<(), Error> {
     Ok(())
 }
 
-
 matrix_test!(cursor_sequential);
+matrix_test!(cursor_iter_manual);
+matrix_test!(cursor_next_buf);
 matrix_test!(cursor_range);
 matrix_test!(cursor_removed_items);

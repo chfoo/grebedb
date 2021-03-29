@@ -7,3 +7,7 @@
 
 ## Data from example programs
 /grebedb_example_data/
+
+## Coverage report output
+/grebedb.profdata
+/grebedb_coverage_report.html

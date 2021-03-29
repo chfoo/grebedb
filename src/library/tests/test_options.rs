@@ -48,15 +48,59 @@ fn test_read_only() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_create_only() -> anyhow::Result<()> {
+    let memory_vfs = MemoryVfs::default();
+    let options = Options::default();
+    let mut db = Database::open(Box::new(memory_vfs.clone()), options)?;
+
+    for num in 0..1000 {
+        let key = format!("key:{:016x}", num);
+        let value = format!("hello world {}", num);
+        db.put(key, value)?;
+    }
+
+    db.flush()?;
+    drop(db);
+
+    let options = Options {
+        open_mode: OpenMode::CreateOnly,
+        ..Default::default()
+    };
+
+    let result = Database::open(Box::new(memory_vfs), options);
+
+    assert!(result.is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_load_only() {
+    let options = Options {
+        open_mode: OpenMode::LoadOnly,
+        ..Default::default()
+    };
+
+    let result = Database::open_memory(options);
+
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_no_compression() -> anyhow::Result<()> {
+    let vfs = MemoryVfs::default();
     let options = Options {
         compression_level: CompressionLevel::None,
         ..Default::default()
     };
-    let mut db = Database::open_memory(options)?;
+    let mut db = Database::open(Box::new(vfs.clone()), options.clone())?;
 
     db.put("my key", "hello world")?;
     db.flush()?;
+
+    let mut db = Database::open(Box::new(vfs), options)?;
+
+    assert!(db.get("my key")?.is_some());
 
     Ok(())
 }

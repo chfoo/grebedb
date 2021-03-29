@@ -32,13 +32,13 @@ impl OperationGenerator {
     fn new(max_keys: usize) -> Self {
         let mut choices = Vec::new();
 
-        for _ in 0..2000 {
+        for _ in 0..200 {
             choices.push(OperationChoice::Get);
         }
-        for _ in 0..7000 {
+        for _ in 0..700 {
             choices.push(OperationChoice::Put);
         }
-        for _ in 0..1000 {
+        for _ in 0..100 {
             choices.push(OperationChoice::Remove);
         }
 
