@@ -90,7 +90,7 @@ pub struct Options {
     /// a flush is scheduled to be performed on the next modification.
     pub automatic_flush_threshold: usize,
 
-    /// Compression level for each page. Default: Fast.
+    /// Compression level for each page. Default: Low.
     pub compression_level: CompressionLevel,
 }
 
@@ -484,6 +484,9 @@ impl<'a> Cursor<'a> {
     }
 
     /// Advance the cursor forward and write the key-value pair to the given buffer.
+    ///
+    /// Returns true if the key-value pair was written.
+    /// Returns false if there are no more key-value pairs in range.
     pub fn next_buf(&mut self, key: &mut Vec<u8>, value: &mut Vec<u8>) -> Result<bool, Error> {
         if !self.has_seeked {
             self.has_seeked = true;

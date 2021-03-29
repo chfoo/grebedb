@@ -2,7 +2,7 @@
 
 GrebeDB is a Rust library that provides a lightweight embedded key-value store/database backed by files in a virtual file system interface. It is intended for single-process applications that prefer a key-value database-like interface to data instead operating on file formats directly.
 
-![Crates.io](https://img.shields.io/crates/v/grebedb) ![docs.rs](https://img.shields.io/docsrs/grebedb)
+[![Crates.io](https://img.shields.io/crates/v/grebedb)](https://crates.io/crates/grebedb) [![docs.rs](https://img.shields.io/docsrs/grebedb)](https://docs.rs/grebedb)
 
 **Note:** The library is *not* fully production-ready and has not been extensively tested, but it is in a usable state. Use with caution and make backups regularly of important data.
 
