@@ -4,7 +4,7 @@ GrebeDB is a Rust library that provides a lightweight embedded key-value store/d
 
 ![Crates.io](https://img.shields.io/crates/v/grebedb) ![docs.rs](https://img.shields.io/docsrs/grebedb)
 
-Note: The library is *not* production-ready.
+**Note:** The library is *not* fully production-ready and has not been extensively tested, but it is in a usable state. Use with caution and make backups regularly of important data.
 
 ## Design summary (limitations and guarantees)
 
@@ -20,7 +20,7 @@ Since there are too many key-value stores, the design of the database is immedia
 * Compression of the file with Zstandard can be used.
 * Concurrency is not supported. No threads are used for background tasks.
 
-For details about the file format, see [format.md](format.md)
+For details about the file format, see [format.md](https://github.com/chfoo/grebedb/blob/main/format.md).
 
 ## Getting started
 
@@ -59,7 +59,7 @@ The database uses an internal cache and automatically delays writing data to the
 db.flush()?;
 ```
 
-For more information, check the [src/library/examples](src/library/examples) directory in the source code repository and the [API reference on docs.rs](https://docs.rs/grebedb).
+For more information, check the [examples](https://github.com/chfoo/grebedb/tree/main/src/library/examples) directory and the [API reference on docs.rs](https://docs.rs/grebedb).
 
 ### Features
 
@@ -67,9 +67,7 @@ By default, the `zstd` crate is enabled for compression, `fslock` is for cross-p
 
 ## Tool
 
-A command-line tool to provide basic manipulation (such as import, export) and debugging is available.
-
-Run `cargo install grebedb-tool` to install the tool to `$HOME/.cargo/bin`, then run `grebedb-tool --help` to show program options.
+For a command-line tool to provide basic manipulation (such as import, export) and debugging, see [grebedb-tool](https://github.com/chfoo/grebedb/tree/main/src/tool).
 
 ## Contributing
 
