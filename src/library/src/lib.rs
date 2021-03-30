@@ -332,7 +332,8 @@ impl Database {
 
     /// Retrieve a stored value, by its key, into the given buffer.
     ///
-    /// Returns true if the key-value pair was found.
+    /// Returns true if the key-value pair was found. The vector will be
+    /// cleared and resized.
     pub fn get_buf<K>(&mut self, key: K, value_destination: &mut Vec<u8>) -> Result<bool, Error>
     where
         K: AsRef<[u8]>,
@@ -483,10 +484,11 @@ impl<'a> Cursor<'a> {
         self.range_end = key.map(|key| key.into());
     }
 
-    /// Advance the cursor forward and write the key-value pair to the given buffer.
+    /// Advance the cursor forward and write the key-value pair to the given buffers.
     ///
     /// Returns true if the key-value pair was written.
     /// Returns false if there are no more key-value pairs in range.
+    /// The vectors will be cleared and resized.
     pub fn next_buf(&mut self, key: &mut Vec<u8>, value: &mut Vec<u8>) -> Result<bool, Error> {
         if !self.has_seeked {
             self.has_seeked = true;

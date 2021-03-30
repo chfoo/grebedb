@@ -59,19 +59,47 @@ The database uses an internal cache and automatically delays writing data to the
 db.flush()?;
 ```
 
+Quick tip: When inserting a large amount of items, insert keys in sorted order for best performance. Inserting many random keys will be slow as it will require opening, writing, and closing the file that contains the position for it. If you need sorted ID generation, try algorithms based on Twitter Snowflake, MongoDB Object ID, or ULID.
+
 For more information, check the [examples](https://github.com/chfoo/grebedb/tree/main/src/library/examples) directory and the [API reference on docs.rs](https://docs.rs/grebedb).
 
 ### Features
 
-By default, the `zstd` crate is enabled for compression, `fslock` is for cross-platform file locking, and `getrandom` is a dependency for `uuid`. To disable them, use `default-features = false` in your Cargo.toml file.
+By default, the features are enabled:
 
-## Tool
+* `compression`: `zstd` crate is enabled for compression
+* `file_locking`: `fslock` is for cross-platform file locking
+* `system`: `getrandom` is a dependency for `uuid`
 
-For a command-line tool to provide basic manipulation (such as import, export) and debugging, see [grebedb-tool](https://github.com/chfoo/grebedb/tree/main/src/tool).
+To disable them, use `default-features = false` in your Cargo.toml file.
+
+### Tool
+
+For a command-line tool to provide basic manipulation (such as import & export for backup) and debugging, see [grebedb-tool](https://github.com/chfoo/grebedb/tree/main/src/tool).
 
 ## Contributing
 
 Please use the GitHub Issues, Pull Requests, and Discussions if you have any problems, bug fixes, or suggestions.
+
+### Roadmap
+
+Possible improvements:
+
+* Reducing memory allocation and copying.
+* Better API that doesn't only accept a `&mut Vec<u8>` type for reduced memory operations.
+* Delaying file fsync to the point when saving the primary metadata file.
+
+### Not in scope
+
+The following features are *not* in scope and likely won't be implemented:
+
+* Reverse cursor direction.
+* Transactions with commit and rollback.
+* Threads for background work (such as non-blocking put or remove).
+* Async/.await support.
+* Anything that is not trivial to write or test.
+
+If you need the above features, it's likely you need a more powerful database with a Rust binding such as RocksDB.
 
 ## License
 
