@@ -75,7 +75,8 @@ pub struct Options {
     /// Default: true.
     ///
     /// When true, data is flushed when the database is dropped or when enough
-    /// modifications accumulate.
+    /// modifications accumulate. Setting this option to false allows you to
+    /// manually persist changes at more optimal points.
     ///
     /// There is no background maintenance thread that does automatic flushing;
     /// automatic flushing occurs when a database modifying function,
@@ -392,10 +393,13 @@ impl Database {
         Ok(cursor)
     }
 
-    /// Persist all internally cached data to the file system.
+    /// Persist all modifications to the file system.
     ///
-    /// Calling this function ensures that all modifications cached in memory
-    /// are written to the file system before this function returns.
+    /// Calling this function ensures that all changes pending, whether cached
+    /// in memory or in files, are atomically saved on the file system
+    /// before this function returns. If the database is not flushed when
+    /// dropped or the program exits, changes since the last successful flush
+    /// will be discarded. This function effectively emulates a transaction.
     ///
     /// For details about automatic flushing, see [`Options`].
     pub fn flush(&mut self) -> Result<(), Error> {

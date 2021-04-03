@@ -36,6 +36,7 @@ The metadata page has the key-value pairs:
 * `id_counter` (u64): Page ID counter. It is incremented when a new ID is required.
 * `free_id_list` (u64 array): Unused page IDs.
 * `root_id` (u64, optional): Page ID containing the root node.
+* `auxiliary` (optional): Auxiliary metadata.
 
 The content page has the key-value pairs:
 
@@ -44,6 +45,10 @@ The content page has the key-value pairs:
 * `revision` (u64): Revision ID. It must be equal or less to the value in the metadata page. A larger value indicates the page was not committed and should be discarded.
 * `deleted` (boolean): If true, there is no content and this page ID can be reused.
 * `content` (optional): Node data.
+
+The auxiliary metadata is a map with string keys:
+
+* `key_value_count` (u64): Number of key-value pairs stored in the tree.
 
 ## Filename
 

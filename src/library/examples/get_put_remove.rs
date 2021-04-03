@@ -33,10 +33,13 @@ fn main() -> Result<(), grebedb::Error> {
 
     // Data stored in internal cache is automatically written to the
     // file system when needed, but this only happens when a database
-    // operation function is called or when the database is dropped.
+    // operation function is called, with automatic flushing,
+    // or when the database is dropped.
     //
     // If you need to ensure all data is persisted at a given time,
-    // you can call flush().
+    // you can call flush() manually. This method effectively emulates
+    // a transaction as it saves the database changes with atomicity
+    // before returning.
     db.flush()?;
 
     Ok(())
