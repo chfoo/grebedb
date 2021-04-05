@@ -174,11 +174,11 @@ fn rand_operation(mut database: Database, rounds: usize) -> Result<(), Error> {
 
     println!(
         "current len={}, expected len={}",
-        database.cursor().count(),
+        database.cursor()?.count(),
         std_map.len()
     );
 
-    let mut cursor = database.cursor();
+    let mut cursor = database.cursor()?;
     let mut std_iter = std_map.iter();
 
     loop {

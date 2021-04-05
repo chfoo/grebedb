@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{collections::VecDeque, fmt::Debug, ops::RangeBounds};
 
 use serde::{Deserialize, Serialize};
 
@@ -385,7 +385,7 @@ impl Tree {
         Ok(())
     }
 
-    pub fn upgrade(&mut self)  -> Result<(), Error> {
+    pub fn upgrade(&mut self) -> Result<(), Error> {
         if self.page_table.auxiliary_metadata().is_none() {
             self.page_table
                 .set_auxiliary_metadata(Some(TreeMetadata::default()))
@@ -508,22 +508,23 @@ impl Tree {
         Ok(())
     }
 
-    pub fn cursor_next(
+    pub fn cursor_next<R>(
         &mut self,
         cursor: &mut TreeCursor,
         key_buffer: &mut Vec<u8>,
         value_buffer: &mut Vec<u8>,
-        range_end: &Option<Vec<u8>>,
-    ) -> Result<bool, Error> {
+        range: &R,
+    ) -> Result<bool, Error>
+    where
+        R: RangeBounds<[u8]>,
+    {
         self.cursor_load_next_leaf_node(cursor)?;
 
         if let Some(leaf_node) = &cursor.leaf_node {
             let (key, value) = leaf_node.get(cursor.key_index);
 
-            if let Some(range_end) = range_end {
-                if key >= range_end {
-                    return Ok(false);
-                }
+            if !range.contains(key) {
+                return Ok(false);
             }
 
             cursor.key_index += 1;

@@ -49,7 +49,7 @@ fn main() -> Result<(), grebedb::Error> {
         }
 
         let mut keys_to_remove = Vec::new();
-        let mut cursor = db.cursor();
+        let mut cursor = db.cursor()?;
 
         for _ in 0..100 {
             if let Some((key, _value)) = cursor.next() {

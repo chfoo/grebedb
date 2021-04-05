@@ -150,7 +150,7 @@ impl Dumper {
 
     fn write_key_values(&mut self) -> anyhow::Result<()> {
         let mut database = self.database.take().unwrap();
-        let mut cursor = database.cursor();
+        let mut cursor = database.cursor()?;
 
         loop {
             let mut row = KeyValueRow::default();

@@ -34,6 +34,7 @@ pub mod vfs;
 
 use std::{
     fmt::Debug,
+    ops::{Bound, RangeBounds},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -364,31 +365,35 @@ impl Database {
     }
 
     /// Return a cursor for iterating all the key-value pairs.
-    pub fn cursor(&mut self) -> Cursor<'_> {
-        Cursor::new(&mut self.tree)
+    pub fn cursor(&mut self) -> Result<Cursor<'_>, Error> {
+        Ok(Cursor::new(&mut self.tree))
     }
 
     /// Return a cursor for iterating all the key-value pairs within the given
     /// range.
     ///
-    /// This method is equivalent of obtaining a cursor and setting
-    /// [`Cursor::seek()`] and [`Cursor::set_range_end()`]
-    pub fn cursor_range<K1, K2>(
-        &mut self,
-        start: Option<K1>,
-        end: Option<K2>,
-    ) -> Result<Cursor<'_>, Error>
+    /// This method is equivalent of obtaining a cursor and calling
+    /// [`Cursor::seek()`] and [`Cursor::set_range()`]
+    pub fn cursor_range<K, R>(&mut self, range: R) -> Result<Cursor<'_>, Error>
     where
-        K1: AsRef<[u8]>,
-        K2: Into<Vec<u8>>,
+        K: AsRef<[u8]>,
+        R: RangeBounds<K>,
     {
         let mut cursor = Cursor::new(&mut self.tree);
 
-        if let Some(start) = start {
-            cursor.seek(start)?;
+        match range.start_bound() {
+            Bound::Included(key) => {
+                cursor.seek(key)?;
+            }
+            Bound::Excluded(key) => {
+                let mut key = key.as_ref().to_vec();
+                key.push(0);
+                cursor.seek(key)?;
+            }
+            Bound::Unbounded => {}
         }
 
-        cursor.set_range_end(end);
+        cursor.set_range(range);
 
         Ok(cursor)
     }
@@ -446,7 +451,7 @@ pub struct Cursor<'a> {
     tree_cursor: TreeCursor,
     error: Option<Error>,
     has_seeked: bool,
-    range_end: Option<Vec<u8>>,
+    range: (Bound<Vec<u8>>, Bound<Vec<u8>>),
 }
 
 impl<'a> Cursor<'a> {
@@ -456,7 +461,7 @@ impl<'a> Cursor<'a> {
             tree_cursor: TreeCursor::default(),
             error: None,
             has_seeked: false,
-            range_end: None,
+            range: (Bound::Unbounded, Bound::Unbounded),
         }
     }
 
@@ -467,8 +472,11 @@ impl<'a> Cursor<'a> {
 
     /// Reposition the cursor at or after the given key.
     ///
-    /// In other words, the cursor will return key-value pairs that are equal
-    /// or greater than the given key.
+    /// In other words, the cursor will be positioned to return key-value pairs
+    /// that are equal or greater than the given key.
+    ///
+    /// If a range has been set and the cursor is positioned outside the range,
+    /// the iteration is considered terminated and no key-value pairs will returned.
     pub fn seek<K>(&mut self, key: K) -> Result<(), Error>
     where
         K: AsRef<[u8]>,
@@ -477,21 +485,28 @@ impl<'a> Cursor<'a> {
         self.tree.cursor_start(&mut self.tree_cursor, key.as_ref())
     }
 
-    /// Set the range of the cursor to those before the given key.
+    /// Limit the key-value pairs within a range of keys.
     ///
-    /// In other words, the cursor will return key-value pairs that are less
-    /// than the given key.
-    pub fn set_range_end<K>(&mut self, key: Option<K>)
+    /// The cursor will return key-value pairs where the keys are contained
+    /// within the given range.
+    ///
+    /// This function will not reposition the cursor to a position within the
+    /// range. You must call [`Self::seek()`] manually since the cursor will not
+    /// automatically seek forward to a range's starting bound.
+    pub fn set_range<K, R>(&mut self, range: R)
     where
-        K: Into<Vec<u8>>,
+        K: AsRef<[u8]>,
+        R: RangeBounds<K>,
     {
-        self.range_end = key.map(|key| key.into());
+        self.range = concrete_range(range);
     }
 
     /// Advance the cursor forward and write the key-value pair to the given buffers.
     ///
     /// Returns true if the key-value pair was written.
-    /// Returns false if there are no more key-value pairs in range.
+    /// Returns false if there are no more key-value pairs
+    /// or the cursor is positioned outside the range if set.
+    ///
     /// The vectors will be cleared and resized.
     pub fn next_buf(&mut self, key: &mut Vec<u8>, value: &mut Vec<u8>) -> Result<bool, Error> {
         if !self.has_seeked {
@@ -501,7 +516,7 @@ impl<'a> Cursor<'a> {
 
         if self
             .tree
-            .cursor_next(&mut self.tree_cursor, key, value, &self.range_end)?
+            .cursor_next(&mut self.tree_cursor, key, value, &slice_range(&self.range))?
         {
             Ok(true)
         } else {
@@ -609,4 +624,38 @@ pub fn debug_print_page(path: &Path) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+fn concrete_range<K, R>(range: R) -> (Bound<Vec<u8>>, Bound<Vec<u8>>)
+where
+    K: AsRef<[u8]>,
+    R: RangeBounds<K>,
+{
+    let start_bound: Bound<Vec<u8>> = match range.start_bound() {
+        Bound::Included(bound) => Bound::Included(bound.as_ref().to_vec()),
+        Bound::Excluded(bound) => Bound::Excluded(bound.as_ref().to_vec()),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    let end_bound: Bound<Vec<u8>> = match range.end_bound() {
+        Bound::Included(bound) => Bound::Included(bound.as_ref().to_vec()),
+        Bound::Excluded(bound) => Bound::Excluded(bound.as_ref().to_vec()),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    (start_bound, end_bound)
+}
+
+fn slice_range<'a>(
+    range: &'a (Bound<Vec<u8>>, Bound<Vec<u8>>),
+) -> (Bound<&'a [u8]>, Bound<&'a [u8]>) {
+    let start_bound: Bound<&'a [u8]> = match range.start_bound() {
+        Bound::Included(bound) => Bound::Included(bound),
+        Bound::Excluded(bound) => Bound::Excluded(bound),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    let end_bound: Bound<&'a [u8]> = match range.end_bound() {
+        Bound::Included(bound) => Bound::Included(bound),
+        Bound::Excluded(bound) => Bound::Excluded(bound),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    (start_bound, end_bound)
 }

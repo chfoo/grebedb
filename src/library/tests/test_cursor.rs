@@ -10,7 +10,7 @@ fn cursor_sequential(mut database: Database) -> Result<(), Error> {
         database.put(key, value)?;
     }
 
-    let cursor = database.cursor();
+    let cursor = database.cursor()?;
     let values: Vec<(Vec<u8>, Vec<u8>)> = cursor.collect();
 
     assert_eq!(values.len(), 10000);
@@ -34,7 +34,7 @@ fn cursor_iter_manual(mut database: Database) -> Result<(), Error> {
         database.put(key, value)?;
     }
 
-    let mut cursor = database.cursor();
+    let mut cursor = database.cursor()?;
     let mut count = 0;
 
     while let Some((key, value)) = cursor.next() {
@@ -57,7 +57,7 @@ fn cursor_next_buf(mut database: Database) -> Result<(), Error> {
         database.put(key, value)?;
     }
 
-    let mut cursor = database.cursor();
+    let mut cursor = database.cursor()?;
     let mut count = 0;
     let mut key = Vec::new();
     let mut value = Vec::new();
@@ -90,7 +90,7 @@ fn cursor_removed_items(mut database: Database) -> Result<(), Error> {
         database.remove(key)?;
     }
 
-    let cursor = database.cursor();
+    let cursor = database.cursor()?;
     let values: Vec<(Vec<u8>, Vec<u8>)> = cursor.collect();
 
     assert_eq!(values.len(), 0);
@@ -108,7 +108,7 @@ fn cursor_range(mut database: Database) -> Result<(), Error> {
     database.put("key:700", "hello world 700")?;
     database.put("key:800", "hello world 800")?;
 
-    let cursor = database.cursor_range(Some("key:250"), Some("key:650"))?;
+    let cursor = database.cursor_range("key:250".."key:650")?;
     let keys: Vec<String> = cursor
         .map(|(key, _value)| String::from_utf8(key).unwrap())
         .collect();
@@ -122,6 +122,24 @@ fn cursor_range(mut database: Database) -> Result<(), Error> {
             "key:600".to_string()
         ]
     );
+
+    let cursor = database.cursor_range("key:100"..="key:200")?;
+    let keys: Vec<String> = cursor
+        .map(|(key, _value)| String::from_utf8(key).unwrap())
+        .collect();
+    assert_eq!(keys, vec!["key:100".to_string(), "key:200".to_string(),]);
+
+    let cursor = database.cursor_range(.."key:200")?;
+    let keys: Vec<String> = cursor
+        .map(|(key, _value)| String::from_utf8(key).unwrap())
+        .collect();
+    assert_eq!(keys, vec!["key:100".to_string(),]);
+
+    let cursor = database.cursor_range("key:750"..)?;
+    let keys: Vec<String> = cursor
+        .map(|(key, _value)| String::from_utf8(key).unwrap())
+        .collect();
+    assert_eq!(keys, vec!["key:800".to_string(),]);
 
     Ok(())
 }
