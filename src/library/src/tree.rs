@@ -567,6 +567,59 @@ impl Tree {
         self.page_table.commit()
     }
 
+    pub fn verify_tree<P>(&mut self, mut progress_callback: P) -> Result<(), Error>
+    where
+        P: FnMut(usize, usize),
+    {
+        let page_id = if let Some(page_id) = self.page_table.root_id() {
+            page_id
+        } else {
+            return Err(Error::InvalidMetadata {
+                message: "missing root page ID",
+            });
+        };
+        let mut current = 0usize;
+        let mut total = 0usize;
+        let mut page_queue = VecDeque::new();
+
+        page_queue.push_back(page_id);
+        total += 1;
+
+        while let Some(page_id) = page_queue.pop_front() {
+            let node = self.read_node(page_id)?;
+
+            current += 1;
+            progress_callback(current, total);
+
+            match node {
+                Node::EmptyRoot => {}
+                Node::Internal(internal_node) => {
+                    if let Some(message) = internal_node.verify() {
+                        return Err(Error::InvalidPageData {
+                            page: page_id,
+                            message,
+                        });
+                    }
+
+                    for page_id in internal_node.children() {
+                        page_queue.push_back(*page_id);
+                        total += 1;
+                    }
+                }
+                Node::Leaf(leaf_node) => {
+                    if let Some(message) = leaf_node.verify() {
+                        return Err(Error::InvalidPageData {
+                            page: page_id,
+                            message,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn dump_tree(&mut self) -> Result<(), Error> {
         let page_id = self.page_table.root_id().unwrap();
         let mut page_queue = VecDeque::new();

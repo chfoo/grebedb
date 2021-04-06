@@ -172,6 +172,8 @@ fn rand_operation(mut database: Database, rounds: usize) -> Result<(), Error> {
         }
     }
 
+    database.verify(|_, _| {})?;
+
     println!(
         "current len={}, expected len={}",
         database.cursor()?.count(),

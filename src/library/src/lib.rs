@@ -411,6 +411,20 @@ impl Database {
         self.tree.flush()
     }
 
+    /// Check the database for internal consistency and data integrity.
+    ///
+    /// The provided callback function is called with the number of items
+    /// processed and the estimated number of items.
+    ///
+    /// The function returns an error on the first verification failure or
+    /// other error.
+    pub fn verify<P>(&mut self, progress_callback: P) -> Result<(), Error>
+    where
+        P: FnMut(usize, usize),
+    {
+        self.tree.verify_tree(progress_callback)
+    }
+
     /// Print the tree for debugging purposes.
     pub fn debug_print_tree(&mut self) -> Result<(), Error> {
         self.tree.dump_tree()

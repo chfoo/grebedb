@@ -5,6 +5,7 @@
 ## 0.2.0 (Unreleased)
 
 * Updated dependency to grebedb 0.2.0
+* Added `verify` command.
 
 ## 0.1.0 (2021-03-28)
 

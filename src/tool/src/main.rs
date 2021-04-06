@@ -1,4 +1,5 @@
 mod export;
+mod verify;
 
 use std::path::Path;
 
@@ -37,6 +38,23 @@ fn main() -> anyhow::Result<()> {
                 )
         )
         .subcommand(
+            SubCommand::with_name("verify")
+                .about("Check the database for internal consistency and data integrity.")
+                .arg(db_path_arg.clone())
+                .arg(
+                    Arg::with_name("write")
+                        .long("write")
+                        .short("w")
+                        .help("Open in read & write mode to allow cleanup operations."),
+                )
+                .arg(
+                    Arg::with_name("verbose")
+                        .long("verbose")
+                        .short("v")
+                        .help("Print rough progress."),
+                )
+        )
+        .subcommand(
             SubCommand::with_name("debug_print_tree")
                 .about("Print the database tree for debugging purposes.")
                 .arg(db_path_arg.clone())
@@ -62,6 +80,11 @@ fn main() -> anyhow::Result<()> {
         ("import", Some(sub_m)) => crate::export::load(
             sub_m.value_of_os("database_path").unwrap().as_ref(),
             sub_m.value_of_os("json_path").unwrap().as_ref(),
+        ),
+        ("verify", Some(sub_m)) => crate::verify::verify(
+            sub_m.value_of_os("database_path").unwrap().as_ref(),
+            sub_m.is_present("write"),
+            sub_m.is_present("verbose"),
         ),
         ("debug_print_tree", Some(sub_m)) => {
             debug_print_tree_command(sub_m.value_of_os("database_path").unwrap().as_ref())

@@ -7,6 +7,7 @@
 * `Cursor::set_end_range()` was removed and replaced with `Cursor::set_range()` which accepts a range.
 * `Database::cursor_range()` changed to accept a range.
 * `Database::cursor()` changed to return a `Result<Cursor>` instead of `Cursor` to better match `Database::cursor_range()`.
+* Added `Database::verify()`.
 
 ## 0.1.0 (2021-03-28)
 
