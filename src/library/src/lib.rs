@@ -436,7 +436,7 @@ impl Database {
                 flush_tracker.increment_modification();
             }
 
-            if flush_tracker.should_flush() {
+            if flush_tracker.check_should_flush() {
                 self.flush()?;
             }
         }
@@ -604,7 +604,7 @@ impl FlushTracker {
         self.modification_count += 1;
     }
 
-    pub fn should_flush(&mut self) -> bool {
+    pub fn check_should_flush(&mut self) -> bool {
         let level_long = self.modification_count >= self.base_threshold
             && self.last_flush_time.elapsed() >= Duration::from_secs(300);
         let level_short = self.modification_count >= self.base_threshold * 2

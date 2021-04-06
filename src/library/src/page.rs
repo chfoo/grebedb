@@ -42,20 +42,20 @@ pub struct Metadata<M> {
     pub auxiliary: Option<M>,
 }
 
-struct PageTracker<T> {
+struct PageCache<T> {
     lru: LruVec<PageId>,
     cached_pages: HashMap<PageId, Page<T>>,
-    modified_pages: HashSet<PageId>, // pages not yet written to disk
+    modified_pages: HashSet<PageId>, // pages in cache not yet written to disk
 }
 
-impl<T> PageTracker<T> {
+impl<T> PageCache<T> {
     pub fn new(capacity: usize) -> Self {
         assert!(capacity >= 1);
 
         Self {
             lru: LruVec::new(capacity),
             cached_pages: HashMap::with_capacity(capacity + 1), // +1 due to statement order
-            modified_pages: HashSet::new(),
+            modified_pages: HashSet::with_capacity(capacity + 1),
         }
     }
 
@@ -67,11 +67,11 @@ impl<T> PageTracker<T> {
         self.modified_pages.clear();
     }
 
-    pub fn contains_page_in_cache(&mut self, page_id: PageId) -> bool {
+    pub fn contains_page(&mut self, page_id: PageId) -> bool {
         self.cached_pages.contains_key(&page_id)
     }
 
-    pub fn get_from_cache(&mut self, page_id: PageId) -> Option<&Page<T>> {
+    pub fn get_touched(&mut self, page_id: PageId) -> Option<&Page<T>> {
         self.lru.touch(&page_id);
         self.cached_pages.get(&page_id)
     }
@@ -80,7 +80,7 @@ impl<T> PageTracker<T> {
         self.cached_pages.get(&page_id)
     }
 
-    pub fn get_from_cache_mut(&mut self, page_id: PageId) -> Option<&mut Page<T>> {
+    pub fn get_touched_mut(&mut self, page_id: PageId) -> Option<&mut Page<T>> {
         self.lru.touch(&page_id);
         self.modified_pages.insert(page_id);
         self.cached_pages.get_mut(&page_id)
@@ -92,7 +92,7 @@ impl<T> PageTracker<T> {
     }
 
     #[must_use]
-    pub fn put_to_cache(&mut self, page_id: PageId, page: Page<T>) -> Option<EvictedPage<T>> {
+    pub fn put_touched(&mut self, page_id: PageId, page: Page<T>) -> Option<EvictedPage<T>> {
         self.cached_pages.insert(page_id, page);
         self.modified_pages.insert(page_id);
 
@@ -268,7 +268,7 @@ where
     options: PageTableOptions,
     vfs: Box<dyn Vfs + Sync + Send>,
     format: Format,
-    page_tracker: PageTracker<T>,
+    page_cache: PageCache<T>,
     counter_tracker: CounterTracker,
     uuid_generator: UuidGenerator,
     uuid: Uuid,
@@ -300,7 +300,7 @@ where
             options: options.clone(),
             vfs,
             format,
-            page_tracker: PageTracker::new(options.page_cache_size),
+            page_cache: PageCache::new(options.page_cache_size),
             uuid: Uuid::nil(),
             counter_tracker: CounterTracker::default(),
             uuid_generator: UuidGenerator::new(),
@@ -360,11 +360,11 @@ where
     fn get_(&mut self, page_id: PageId) -> Result<Option<&T>, Error> {
         self.check_page_id_counter_consistency(page_id)?;
 
-        if !self.page_tracker.contains_page_in_cache(page_id) {
+        if !self.page_cache.contains_page(page_id) {
             self.load_page_into_cache(page_id)?;
         }
 
-        if let Some(page) = self.page_tracker.get_from_cache(page_id) {
+        if let Some(page) = self.page_cache.get_touched(page_id) {
             if let Some(content) = &page.content {
                 Ok(Some(content))
             } else {
@@ -399,7 +399,7 @@ where
             content: Some(content),
         };
 
-        if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+        if let Some(evicted_page_info) = self.page_cache.put_touched(page_id, page) {
             self.maybe_save_evicted_page(evicted_page_info)?;
         }
 
@@ -416,11 +416,11 @@ where
     fn update_(&mut self, page_id: PageId) -> Result<Option<PageUpdateGuard<T>>, Error> {
         self.check_page_id_counter_consistency(page_id)?;
 
-        if !self.page_tracker.contains_page_in_cache(page_id) {
+        if !self.page_cache.contains_page(page_id) {
             self.load_page_into_cache(page_id)?;
         }
 
-        if let Some(page) = self.page_tracker.get_from_cache_mut(page_id) {
+        if let Some(page) = self.page_cache.get_touched_mut(page_id) {
             if page.content.is_some() {
                 Ok(Some(PageUpdateGuard::new(page)))
             } else {
@@ -455,7 +455,7 @@ where
             content: None,
         };
 
-        if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+        if let Some(evicted_page_info) = self.page_cache.put_touched(page_id, page) {
             self.maybe_save_evicted_page(evicted_page_info)?;
         }
 
@@ -478,18 +478,25 @@ where
     }
 
     fn commit_(&mut self) -> Result<(), Error> {
-        if self.counter_tracker.is_dirty() || !self.page_tracker.modified_pages().is_empty() {
-            self.counter_tracker.increment_revision();
+        if !self.is_anything_modified() {
+            return Ok(());
         }
 
-        self.flush_all_modified_pages()?;
-        self.flush_metadata()?;
-        self.promote_modified_page_filenames()?;
-        self.page_tracker.clear_modified_pages();
+        self.counter_tracker.increment_revision();
+
+        self.save_all_modified_pages()?;
+        self.save_metadata()?;
+        self.commit_counters();
+        self.promote_page_filenames()?;
+        self.page_cache.clear_modified_pages();
 
         // Currently, evicted pages don't have their filenames promoted
 
         Ok(())
+    }
+
+    fn is_anything_modified(&self) -> bool {
+        self.counter_tracker.is_dirty() || !self.page_cache.modified_pages().is_empty()
     }
 
     fn load_and_restore_metadata(&mut self) -> Result<(), Error> {
@@ -563,7 +570,6 @@ where
     }
 
     fn load_latest_known_page(&mut self, page_id: PageId) -> Result<Option<Page<T>>, Error> {
-        let page_0 = self.load_page(page_id, RevisionFlag::Current)?;
         let page_1 = self.load_page(page_id, RevisionFlag::New)?;
 
         if let Some(page) = page_1 {
@@ -573,6 +579,8 @@ where
                 return Ok(Some(page));
             }
         }
+
+        let page_0 = self.load_page(page_id, RevisionFlag::Current)?;
 
         if let Some(page) = page_0 {
             if page.revision <= self.counter_tracker.revision() {
@@ -596,7 +604,7 @@ where
                 return Ok(false);
             }
 
-            if let Some(evicted_page_info) = self.page_tracker.put_to_cache(page_id, page) {
+            if let Some(evicted_page_info) = self.page_cache.put_touched(page_id, page) {
                 self.maybe_save_evicted_page(evicted_page_info)?;
             }
 
@@ -609,23 +617,34 @@ where
     fn save_page(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
         self.check_if_read_only()?;
 
-        let path_1 = make_path(page_id, RevisionFlag::New);
-
         if self.options.file_sync == VfsSyncOption::None {
-            self.format
-                .write_file(self.vfs.as_mut(), &path_1, page, self.options.file_sync)?;
+            self.save_page_by_overwrite(page_id, page)?;
         } else {
-            let path_1_temp = format!("{}.tmp", &path_1);
-
-            self.format.write_file(
-                self.vfs.as_mut(),
-                &path_1_temp,
-                page,
-                self.options.file_sync,
-            )?;
-
-            self.vfs.rename_file(&path_1_temp, &path_1)?;
+            self.save_page_by_atomic(page_id, page)?;
         }
+
+        Ok(())
+    }
+
+    fn save_page_by_overwrite(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
+        let path_1 = make_path(page_id, RevisionFlag::New);
+        self.format
+            .write_file(self.vfs.as_mut(), &path_1, page, VfsSyncOption::None)?;
+        Ok(())
+    }
+
+    fn save_page_by_atomic(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
+        let path_1 = make_path(page_id, RevisionFlag::New);
+        let path_1_temp = format!("{}.tmp", &path_1);
+
+        self.format.write_file(
+            self.vfs.as_mut(),
+            &path_1_temp,
+            page,
+            self.options.file_sync,
+        )?;
+
+        self.vfs.rename_file(&path_1_temp, &path_1)?;
 
         Ok(())
     }
@@ -633,13 +652,18 @@ where
     fn save_page_from_cache(&mut self, page_id: PageId) -> Result<(), Error> {
         self.check_if_read_only()?;
 
-        let page = self.page_tracker.take(page_id).unwrap();
+        let page = self.page_cache.take(page_id).unwrap();
         let result = self.save_page(page_id, &page);
-        self.page_tracker.untake(page_id, page);
+        self.page_cache.untake(page_id, page);
 
         result?;
 
         Ok(())
+    }
+
+    fn commit_counters(&mut self) {
+        self.counter_tracker.unset_dirty();
+        self.counter_tracker.set_revision_persisted();
     }
 
     fn save_metadata(&mut self) -> Result<(), Error> {
@@ -711,25 +735,14 @@ where
         Ok(())
     }
 
-    fn flush_all_modified_pages(&mut self) -> Result<(), Error> {
-        let page_ids: Vec<PageId> = self.page_tracker.modified_pages().iter().cloned().collect();
+    fn save_all_modified_pages(&mut self) -> Result<(), Error> {
+        let page_ids: Vec<PageId> = self.page_cache.modified_pages().iter().cloned().collect();
 
         for page_id in page_ids {
-            self.page_tracker
+            self.page_cache
                 .set_page_revision(page_id, self.counter_tracker.revision());
 
             self.save_page_from_cache(page_id)?;
-        }
-
-        Ok(())
-    }
-
-    fn flush_metadata(&mut self) -> Result<(), Error> {
-        if self.counter_tracker.is_dirty() {
-            self.save_metadata()?;
-
-            self.counter_tracker.unset_dirty();
-            self.counter_tracker.set_revision_persisted();
         }
 
         Ok(())
@@ -760,10 +773,10 @@ where
         Ok(())
     }
 
-    fn promote_modified_page_filenames(&mut self) -> Result<(), Error> {
+    fn promote_page_filenames(&mut self) -> Result<(), Error> {
         assert!(self.counter_tracker.revision_on_persistence() == self.counter_tracker.revision());
 
-        let page_ids: Vec<PageId> = self.page_tracker.modified_pages().iter().cloned().collect();
+        let page_ids: Vec<PageId> = self.page_cache.modified_pages().iter().cloned().collect();
 
         for page_id in page_ids {
             self.promote_page_filename(page_id)?;

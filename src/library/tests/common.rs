@@ -55,12 +55,7 @@ macro_rules! multiple_vfs_test {
 #[macro_export]
 macro_rules! multiple_config_test {
     ($fn_name:ident, $ignore:meta) => {
-        multiple_vfs_test!(
-            $fn_name,
-            "default",
-            grebedb::Options::default(),
-            $ignore
-        );
+        multiple_vfs_test!($fn_name, "default", grebedb::Options::default(), $ignore);
 
         multiple_vfs_test!(
             $fn_name,
