@@ -130,6 +130,11 @@ impl Vfs for CrashingVfs {
         self.inner.write(path, data, sync_option)
     }
 
+    fn sync_file(&mut self, path: &str, sync_option: VfsSyncOption) -> Result<(), grebedb::Error> {
+        eprintln!("sync_file {}", path);
+        self.inner.sync_file(path, sync_option)
+    }
+
     fn remove_file(&mut self, path: &str) -> Result<(), grebedb::Error> {
         eprintln!("remove_file {}", path);
         self.inner.remove_file(path)

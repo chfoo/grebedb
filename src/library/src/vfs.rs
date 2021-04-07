@@ -42,6 +42,13 @@ pub trait Vfs {
     /// buffers to persistent storage before returning.
     fn write(&mut self, path: &str, data: &[u8], sync_option: VfsSyncOption) -> Result<(), Error>;
 
+    /// Flush buffered data of a file to persistent storage.
+    ///
+    /// If supported by the file system, the method calls the appropriate
+    /// sync operation on an existing, writable file without modifying the file
+    /// contents. Flush operations complete before returning.
+    fn sync_file(&mut self, path: &str, sync_option: VfsSyncOption) -> Result<(), Error>;
+
     /// Delete a file.
     ///
     /// If the file does not exist, an error is returned.
@@ -174,6 +181,10 @@ impl Vfs for MemoryVfs {
     fn write(&mut self, path: &str, data: &[u8], _sync_option: VfsSyncOption) -> Result<(), Error> {
         let mut file = self.vfs.join(path)?.create_file()?;
         file.write_all(data)?;
+        Ok(())
+    }
+
+    fn sync_file(&mut self, _path: &str, _sync_option: VfsSyncOption) -> Result<(), Error> {
         Ok(())
     }
 
@@ -317,6 +328,24 @@ impl Vfs for OsVfs {
         }
     }
 
+    fn sync_file(&mut self, path: &str, sync_option: VfsSyncOption) -> Result<(), Error> {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(self.root.join(path))?;
+
+        match sync_option {
+            VfsSyncOption::None => {}
+            VfsSyncOption::Data => {
+                file.sync_data()?;
+            }
+            VfsSyncOption::All => {
+                file.sync_all()?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn remove_file(&mut self, path: &str) -> Result<(), Error> {
         Ok(std::fs::remove_file(self.root.join(path))?)
     }
@@ -398,6 +427,10 @@ impl Vfs for ReadOnlyVfs {
         _data: &[u8],
         _sync_option: VfsSyncOption,
     ) -> Result<(), Error> {
+        Err(Error::ReadOnly)
+    }
+
+    fn sync_file(&mut self, _path: &str, _sync_option: VfsSyncOption) -> Result<(), Error> {
         Err(Error::ReadOnly)
     }
 

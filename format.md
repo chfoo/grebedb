@@ -54,12 +54,12 @@ The auxiliary metadata is a map with string keys:
 
 The lock file uses the filename `grebedb_lock.lock`.
 
-The metadata file uses the filename `grebedb_meta.grebedb`. A copy is saved to `grebedb_meta_bak.grebedb` and a previous copy to `grebedb_meta_prev.grebedb`.
+The metadata file uses the filename `grebedb_meta.grebedb`. A copy is saved to `grebedb_meta_copy.grebedb` and a previous copy to `grebedb_meta_prev.grebedb`.
 
 For node files, filenames use the format `ID_PATH/grebedb_ID_REVISION.grebedb` where:
 
 * `ID` (16 character string): lowercase hexadecimal encoded 64-bit big-endian unsigned integer.
-* `REVISION` (1 character string): digit `0` or `1`. Implementations use the page that contains the greatest valid revision ID.
+* `REVISION` (1 character string): digit `0`, `1`, `2`. Implementations use the page that contains the greatest valid revision ID.
 * `ID_PATH`: the first 14 characters of ID split into 7 directories (for example, `ab/cd/ef/01/23/45/67`).
 
 ## Node

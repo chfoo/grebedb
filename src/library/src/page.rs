@@ -128,6 +128,12 @@ struct EvictedPage<T> {
 }
 
 #[derive(Default)]
+struct FileTracker {
+    pub pending_sync: HashSet<PageId>, // files written but not fsync()-ed
+    pub pending_promotion: HashSet<PageId>, // files not renamed to the main filename
+}
+
+#[derive(Default)]
 struct CounterTracker {
     dirty: bool,
     revision: RevisionId,                // revision counter in memory
@@ -221,6 +227,7 @@ impl CounterTracker {
 enum RevisionFlag {
     Current,
     New,
+    NewUnsync,
 }
 
 #[derive(Debug, Clone)]
@@ -269,6 +276,7 @@ where
     vfs: Box<dyn Vfs + Sync + Send>,
     format: Format,
     page_cache: PageCache<T>,
+    file_tracker: FileTracker,
     counter_tracker: CounterTracker,
     uuid_generator: UuidGenerator,
     uuid: Uuid,
@@ -302,6 +310,7 @@ where
             format,
             page_cache: PageCache::new(options.page_cache_size),
             uuid: Uuid::nil(),
+            file_tracker: FileTracker::default(),
             counter_tracker: CounterTracker::default(),
             uuid_generator: UuidGenerator::new(),
             closed: false,
@@ -485,12 +494,13 @@ where
         self.counter_tracker.increment_revision();
 
         self.save_all_modified_pages()?;
+        self.sync_pending_page_files()?;
+        self.file_tracker.pending_sync.clear();
         self.save_metadata()?;
         self.commit_counters();
         self.promote_page_filenames()?;
+        self.file_tracker.pending_promotion.clear();
         self.page_cache.clear_modified_pages();
-
-        // Currently, evicted pages don't have their filenames promoted
 
         Ok(())
     }
@@ -570,11 +580,21 @@ where
     }
 
     fn load_latest_known_page(&mut self, page_id: PageId) -> Result<Option<Page<T>>, Error> {
+        if self.file_tracker.pending_sync.contains(&page_id) {
+            let page_2 = self.load_page(page_id, RevisionFlag::NewUnsync)?;
+
+            if let Some(page) = page_2 {
+                if page.revision <= self.counter_tracker.revision() {
+                    return Ok(Some(page));
+                }
+            }
+        }
+
         let page_1 = self.load_page(page_id, RevisionFlag::New)?;
 
         if let Some(page) = page_1 {
             if page.revision <= self.counter_tracker.revision() {
-                self.check_and_maybe_promote_page_filename(&page)?;
+                self.maybe_queue_page_for_filename_promotion(&page);
 
                 return Ok(Some(page));
             }
@@ -620,8 +640,14 @@ where
         if self.options.file_sync == VfsSyncOption::None {
             self.save_page_by_overwrite(page_id, page)?;
         } else {
-            self.save_page_by_atomic(page_id, page)?;
+            self.save_page_with_delayed_sync(page_id, page)?;
         }
+        // TODO: provide an option for the user to decide, or stop queueing once
+        // the queues are getting relatively full,
+        // but it will introduce more code path test complexity.
+        // } else {
+        // self.save_page_by_atomic(page_id, page)?;
+        // }
 
         Ok(())
     }
@@ -633,7 +659,22 @@ where
         Ok(())
     }
 
-    fn save_page_by_atomic(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
+    fn save_page_with_delayed_sync(
+        &mut self,
+        page_id: PageId,
+        page: &Page<T>,
+    ) -> Result<(), Error> {
+        let path_2 = make_path(page_id, RevisionFlag::NewUnsync);
+
+        self.format
+            .write_file(self.vfs.as_mut(), &path_2, page, VfsSyncOption::None)?;
+
+        self.file_tracker.pending_sync.insert(page_id);
+
+        Ok(())
+    }
+
+    fn _save_page_by_atomic(&mut self, page_id: PageId, page: &Page<T>) -> Result<(), Error> {
         let path_1 = make_path(page_id, RevisionFlag::New);
         let path_1_temp = format!("{}.tmp", &path_1);
 
@@ -645,6 +686,7 @@ where
         )?;
 
         self.vfs.rename_file(&path_1_temp, &path_1)?;
+        self.file_tracker.pending_promotion.insert(page_id);
 
         Ok(())
     }
@@ -748,8 +790,31 @@ where
         Ok(())
     }
 
+    fn sync_pending_page_files(&mut self) -> Result<(), Error> {
+        let page_ids: Vec<PageId> = self.file_tracker.pending_sync.iter().cloned().collect();
+
+        for page_id in page_ids {
+            self.sync_pending_page_file(page_id)?;
+        }
+
+        Ok(())
+    }
+
+    fn sync_pending_page_file(&mut self, page_id: PageId) -> Result<(), Error> {
+        let path_1 = make_path(page_id, RevisionFlag::New);
+        let path_2 = make_path(page_id, RevisionFlag::NewUnsync);
+
+        self.vfs.sync_file(&path_2, self.options.file_sync)?;
+        self.vfs.rename_file(&path_2, &path_1)?;
+        self.file_tracker.pending_promotion.insert(page_id);
+
+        Ok(())
+    }
+
     fn promote_page_filename(&mut self, page_id: PageId) -> Result<(), Error> {
         self.check_if_read_only()?;
+
+        assert!(self.file_tracker.pending_sync.is_empty());
 
         let path_0 = make_path(page_id, RevisionFlag::Current);
         let path_1 = make_path(page_id, RevisionFlag::New);
@@ -759,24 +824,29 @@ where
         Ok(())
     }
 
-    fn check_and_maybe_promote_page_filename(&mut self, page: &Page<T>) -> Result<(), Error> {
-        // Reasons why pages weren't promoted:
-        // 1. Pages that weren't tracked due to being evicted from cache
-        // 2. Process crashed after writing metadata, but before all filenames
-        //    were promoted
+    fn maybe_queue_page_for_filename_promotion(&mut self, page: &Page<T>) {
         if self.options.open_mode != PageOpenMode::ReadOnly
             && page.revision <= self.counter_tracker.revision_on_persistence()
         {
-            self.promote_page_filename(page.id)?;
-        }
+            // This case is possible when the process crashed after
+            // writing metadata, but before all filenames were promoted.
+            // Possibly in the future, the queue is too large and not all pages
+            // were promoted to reduce memory usage.
 
-        Ok(())
+            self.file_tracker.pending_promotion.insert(page.id);
+        }
     }
 
     fn promote_page_filenames(&mut self) -> Result<(), Error> {
         assert!(self.counter_tracker.revision_on_persistence() == self.counter_tracker.revision());
+        assert!(self.file_tracker.pending_sync.is_empty());
 
-        let page_ids: Vec<PageId> = self.page_cache.modified_pages().iter().cloned().collect();
+        let page_ids: Vec<PageId> = self
+            .file_tracker
+            .pending_promotion
+            .iter()
+            .cloned()
+            .collect();
 
         for page_id in page_ids {
             self.promote_page_filename(page_id)?;
@@ -875,12 +945,9 @@ fn make_filename(page_id: PageId, revision_flag: RevisionFlag) -> String {
         "grebedb_{:016x}_{}.grebedb",
         page_id,
         match revision_flag {
-            RevisionFlag::Current => {
-                0
-            }
-            RevisionFlag::New => {
-                1
-            }
+            RevisionFlag::Current => 0,
+            RevisionFlag::New => 1,
+            RevisionFlag::NewUnsync => 2,
         }
     )
 }
