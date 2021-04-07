@@ -85,9 +85,11 @@ Please use the GitHub Issues, Pull Requests, and Discussions if you have any pro
 
 Possible improvements:
 
-* Reducing memory allocation and copying.
-* Better API that doesn't only accept a `&mut Vec<u8>` type for reduced memory operations.
-* Delaying file fsync to the point when saving the primary metadata file.
+* Better API for buffer arguments. The `&mut Vec<u8>` type might be inflexible.
+* Reduce internal memory allocation and copying.
+* Reduce disk IO with smarter caching.
+* More tests for error cases.
+* Tool command to quickly make small edits to the database.
 
 ### Not in scope
 
@@ -98,7 +100,7 @@ The following non-exhaustive features are *not* in scope and likely won't be imp
 * Threads for performing automatic background work.
 * Async/.await support.
 
-If you need more features or require better performance, it's likely you need a more powerful database with a Rust binding such as RocksDB.
+If you need more features or require better performance, it's likely you need a more powerful database with a Rust binding such as RocksDB or a traditional database like SQLite.
 
 ## License
 
