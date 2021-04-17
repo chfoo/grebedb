@@ -48,6 +48,23 @@ fn test_read_only() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_read_only_no_clobber_not_a_db() -> anyhow::Result<()> {
+    let dir = common::make_tempdir();
+    let options = Options {
+        open_mode: OpenMode::ReadOnly,
+        ..Default::default()
+    };
+
+    let result = Database::open_path(dir.path(), options);
+    assert!(result.is_err());
+
+    let contents = std::fs::read_dir(dir.path())?.count();
+    assert_eq!(contents, 0);
+
+    Ok(())
+}
+
+#[test]
 fn test_create_only() -> anyhow::Result<()> {
     let memory_vfs = MemoryVfs::default();
     let options = Options::default();
@@ -84,6 +101,23 @@ fn test_load_only() {
     let result = Database::open_memory(options);
 
     assert!(result.is_err());
+}
+
+#[test]
+fn test_load_only_no_clobber_not_a_db() -> anyhow::Result<()> {
+    let dir = common::make_tempdir();
+    let options = Options {
+        open_mode: OpenMode::LoadOnly,
+        ..Default::default()
+    };
+
+    let result = Database::open_path(dir.path(), options);
+    assert!(result.is_err());
+
+    let contents = std::fs::read_dir(dir.path())?.count();
+    assert_eq!(contents, 0);
+
+    Ok(())
 }
 
 #[test]

@@ -293,13 +293,22 @@ where
         mut vfs: Box<dyn Vfs + Sync + Send>,
         options: PageTableOptions,
     ) -> Result<Self, Error> {
+        if matches!(
+            options.open_mode,
+            PageOpenMode::LoadOnly | PageOpenMode::ReadOnly
+        ) && !Self::metadata_file_exists(vfs.as_ref())?
+        {
+            return Err(Error::InvalidFileFormat {
+                path: "(directory contents)".to_string(),
+                message: "not a database",
+            });
+        }
+
         if options.file_locking {
             vfs.lock(LOCK_FILENAME)?;
         }
 
-        let metadata_file_exists = vfs.exists(METADATA_FILENAME)?
-            || vfs.exists(METADATA_COPY_FILENAME)?
-            || vfs.exists(METADATA_OLD_FILENAME)?;
+        let metadata_file_exists = Self::metadata_file_exists(vfs.as_ref())?;
 
         let mut format = Format::default();
         format.set_compression_level(options.compression_level);
@@ -334,6 +343,12 @@ where
         }
 
         Ok(table)
+    }
+
+    fn metadata_file_exists(vfs: &dyn Vfs) -> Result<bool, Error> {
+        Ok(vfs.exists(METADATA_FILENAME)?
+            || vfs.exists(METADATA_COPY_FILENAME)?
+            || vfs.exists(METADATA_OLD_FILENAME)?)
     }
 
     pub fn root_id(&self) -> Option<PageId> {

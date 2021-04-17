@@ -25,7 +25,7 @@ pub enum Error {
         path: String,
     },
 
-    /// A file is not format correctly.
+    /// A file contained unexpected data or is not a database file.
     #[error("invalid file format: {message}, {path}")]
     InvalidFileFormat {
         /// Path to file.
