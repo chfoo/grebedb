@@ -89,7 +89,6 @@ Possible improvements:
 * Reduce internal memory allocation and copying.
 * Reduce disk IO with smarter caching.
 * More tests for error cases.
-* Tool command to quickly make small edits to the database.
 
 ### Not in scope
 

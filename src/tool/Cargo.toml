@@ -22,8 +22,12 @@ default-features = false
 
 [dependencies]
 anyhow = "1.0"
+bson = "1.2"
 clap = "2.33"
 crc32c = "0.6"
 data-encoding = "2.3"
+percent-encoding = "2.1"
+rmpv = "0.4"
+rustyline = "8.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

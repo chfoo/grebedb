@@ -1,4 +1,5 @@
 mod export;
+mod repl;
 mod verify;
 
 use std::path::Path;
@@ -55,6 +56,27 @@ fn main() -> anyhow::Result<()> {
                 )
         )
         .subcommand(
+            SubCommand::with_name("inspect")
+                .about("Start a interactive session for browsing and editing the database contents.")
+                .arg(db_path_arg.clone())
+                .arg(
+                    Arg::with_name("write")
+                        .long("write")
+                        .short("w")
+                        .help("Open in read & write mode."),
+                )
+                .arg(
+                    Arg::with_name("batch")
+                        .long("batch")
+                        .short("b")
+                        .help("Enable batch mode for scripting.")
+                        .long_help("Enable batch mode for scripting.\n\n\
+                            When enabled, any errors are assumed to be undesired and causes the \
+                            program to exit. This can be useful for scripts to send commands \
+                            using standard input.")
+                )
+        )
+        .subcommand(
             SubCommand::with_name("debug_print_tree")
                 .about("Print the database tree for debugging purposes.")
                 .arg(db_path_arg.clone())
@@ -85,6 +107,11 @@ fn main() -> anyhow::Result<()> {
             sub_m.value_of_os("database_path").unwrap().as_ref(),
             sub_m.is_present("write"),
             sub_m.is_present("verbose"),
+        ),
+        ("inspect", Some(sub_m)) => crate::repl::inspect(
+            sub_m.value_of_os("database_path").unwrap().as_ref(),
+            sub_m.is_present("write"),
+            sub_m.is_present("batch"),
         ),
         ("debug_print_tree", Some(sub_m)) => {
             debug_print_tree_command(sub_m.value_of_os("database_path").unwrap().as_ref())
