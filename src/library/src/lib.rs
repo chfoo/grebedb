@@ -177,9 +177,14 @@ pub enum CompressionLevel {
     /// Disable compression.
     None,
 
-    /// Fast compression speeds at the expense of lower compression ratios.
+    /// Very fast compression speeds at the expense of low compression ratios.
     ///
-    /// Currently, this corresponds to Zstandard level 3.
+    /// Currently, this corresponds to Zstandard level 1.
+    VeryLow,
+
+    /// Fast compression speeds at the expense of somewhat low compression ratios.
+    ///
+    /// Currently, this corresponds to Zstandard level 3, the default value.
     Low,
 
     /// Higher compression ratios at the expense of slower compression speeds.
@@ -203,6 +208,7 @@ impl CompressionLevel {
     fn to_zstd(&self) -> Option<i32> {
         match self {
             Self::None => None,
+            Self::VeryLow => Some(1),
             Self::Low => Some(3),
             Self::Medium => Some(9),
             Self::High => Some(19),

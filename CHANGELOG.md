@@ -4,7 +4,13 @@
 
 ## Unreleased
 
+### General
+
 * When attempting to open a database in read-only or load-only mode, a lock file is no longer written to a directory if does not actually contain a database.
+
+### API
+
+* Added `CompressionLevel::VeryLow`.
 
 ## 0.2.0 (2021-04-07)
 
