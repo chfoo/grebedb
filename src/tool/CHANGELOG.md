@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+* Added `--zstd` flag to `import` and `export` commands.
 * Added `inspect` command.
 
 ## 0.2.0 (2021-04-07)

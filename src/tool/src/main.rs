@@ -4,7 +4,7 @@ mod verify;
 
 use std::path::Path;
 
-use clap::{crate_version, App, AppSettings, Arg, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use grebedb::{Database, OpenMode, Options};
 
 fn main() -> anyhow::Result<()> {
@@ -12,6 +12,14 @@ fn main() -> anyhow::Result<()> {
         .value_name("DATABASE")
         .help("Path to the directory containing the database.")
         .required(true);
+
+    let zstd_arg = Arg::with_name("zstd").long("zstd");
+    let compression_level_arg = Arg::with_name("compression_level")
+        .long("compression-level")
+        .short("l")
+        .help("Compression level where 1 is worst (fastest) and 3 is best (slowest).")
+        .default_value("2")
+        .possible_values(&["1", "2", "3", "4", "5"]);
 
     let app = App::new("GrebeDB database manipulation tool")
         .version(crate_version!())
@@ -26,6 +34,8 @@ fn main() -> anyhow::Result<()> {
                         .default_value("-")
                         .help("Filename of the exported file."),
                 )
+                .arg(zstd_arg.clone().help("Use Zstandard compression when writing to DESTINATION."))
+                .arg(compression_level_arg)
         )
         .subcommand(
             SubCommand::with_name("import")
@@ -37,6 +47,7 @@ fn main() -> anyhow::Result<()> {
                         .default_value("-")
                         .help("Filename of the source file."),
                 )
+                .arg(zstd_arg.clone().help("Use Zstandard decompression when reading from SOURCE."))
         )
         .subcommand(
             SubCommand::with_name("verify")
@@ -98,10 +109,12 @@ fn main() -> anyhow::Result<()> {
         ("export", Some(sub_m)) => crate::export::dump(
             sub_m.value_of_os("database_path").unwrap().as_ref(),
             sub_m.value_of_os("json_path").unwrap().as_ref(),
+            parse_zstd_compression_args(sub_m),
         ),
         ("import", Some(sub_m)) => crate::export::load(
             sub_m.value_of_os("database_path").unwrap().as_ref(),
             sub_m.value_of_os("json_path").unwrap().as_ref(),
+            sub_m.is_present("zstd"),
         ),
         ("verify", Some(sub_m)) => crate::verify::verify(
             sub_m.value_of_os("database_path").unwrap().as_ref(),
@@ -122,6 +135,24 @@ fn main() -> anyhow::Result<()> {
         _ => {
             unreachable!();
         }
+    }
+}
+
+fn parse_zstd_compression_args(args: &ArgMatches) -> Option<i32> {
+    if args.is_present("zstd") {
+        let level = args.value_of("compression_level").unwrap();
+        let level: u8 = level.parse().unwrap();
+
+        match level {
+            1 => Some(1),
+            2 => Some(3),
+            3 => Some(9),
+            4 => Some(15),
+            5 => Some(19),
+            _ => unimplemented!(),
+        }
+    } else {
+        None
     }
 }
 

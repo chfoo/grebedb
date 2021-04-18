@@ -14,21 +14,21 @@ The import and export commands can be used to create backups of the database con
 
 The commands can import/export directly to a given filename or through standard input/output.
 
-Export a database to a file:
+Export a database to a (non-existing) file:
 
     grebedb-tool export path/to/database/ database.json-seq
 
 or with compression:
 
-    grebedb-tool export path/to/database/ | zstd -o database.json-seq.zst
+    grebedb-tool export path/to/database/ database.json-seq.zst --zstd
 
-To import a database from a file:
+To import a database (into an empty directory) from a file:
 
     grebedb-tool import path/to/database/ database.json-seq
 
 or with compression:
 
-    unzstd < database.json-seq.zst | grebedb-tool import path/to/database/
+    grebedb-tool import path/to/database/ database.json-seq.zst --zstd
 
 ### Verify
 

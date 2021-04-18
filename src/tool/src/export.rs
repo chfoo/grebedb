@@ -1,6 +1,6 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Read, Stdout, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -57,29 +57,14 @@ where
     }
 }
 
-struct Dumper {
+struct Dumper<W: Write> {
     database: Option<Database>,
     counter: u64,
-    output_file: Option<BufWriter<File>>,
-    output_stdout: Option<BufWriter<Stdout>>,
+    output_file: W,
 }
 
-impl Dumper {
-    fn open(database_path: &Path, output_path: &Path) -> anyhow::Result<Self> {
-        let mut output_file = None;
-        let mut output_stdout = None;
-
-        if output_path.as_os_str() != "-" {
-            output_file = Some(BufWriter::new(
-                OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(output_path)?,
-            ));
-        } else {
-            output_stdout = Some(BufWriter::new(std::io::stdout()));
-        };
-
+impl<W: Write> Dumper<W> {
+    fn open(database_path: &Path, output_file: W) -> anyhow::Result<Self> {
         let options = Options {
             open_mode: OpenMode::ReadOnly,
             ..Default::default()
@@ -90,7 +75,6 @@ impl Dumper {
             database: Some(database),
             counter: 0,
             output_file,
-            output_stdout,
         })
     }
 
@@ -99,28 +83,24 @@ impl Dumper {
         self.write_key_values()?;
         self.write_footer()?;
 
-        self.finish_file()?;
-
         Ok(())
+    }
+
+    pub fn into_inner(self) -> W {
+        self.output_file
     }
 
     fn write_row<T>(&mut self, row: T) -> anyhow::Result<()>
     where
         T: Serialize,
     {
-        if let Some(dest) = &mut self.output_file {
-            Self::serialize_row(dest, &row)?;
-        }
-        if let Some(dest) = &mut self.output_stdout {
-            Self::serialize_row(dest, &row)?;
-        }
+        Self::serialize_row(&mut self.output_file, &row)?;
 
         Ok(())
     }
 
-    fn serialize_row<W, T>(mut dest: W, row: T) -> anyhow::Result<()>
+    fn serialize_row<T>(mut dest: &mut W, row: T) -> anyhow::Result<()>
     where
-        W: Write,
         T: Serialize,
     {
         dest.write_all(&[RECORD_SEPARATOR])?;
@@ -170,42 +150,22 @@ impl Dumper {
 
         Ok(())
     }
-
-    fn finish_file(&mut self) -> anyhow::Result<()> {
-        if let Some(mut dest) = self.output_file.take() {
-            dest.flush()?;
-            let dest = dest.into_inner()?;
-            dest.sync_all()?;
-        }
-        if let Some(mut dest) = self.output_stdout.take() {
-            dest.flush()?;
-        }
-
-        Ok(())
-    }
 }
 
-struct Loader {
+struct Loader<R: BufRead> {
     database: Database,
-    input_file: BufReader<Box<dyn Read>>,
+    input_file: R,
     header_found: bool,
     footer_found: bool,
 }
 
-impl Loader {
-    fn open(database_path: &Path, input_path: &Path) -> anyhow::Result<Self> {
+impl<R: BufRead> Loader<R> {
+    fn open(database_path: &Path, input_file: R) -> anyhow::Result<Self> {
         let options = Options {
             open_mode: OpenMode::CreateOnly,
             ..Default::default()
         };
         let database = Database::open_path(database_path, options)?;
-
-        let file: Box<dyn Read> = if input_path.as_os_str() != "-" {
-            Box::new(File::open(input_path)?)
-        } else {
-            Box::new(std::io::stdin())
-        };
-        let input_file = BufReader::new(file);
 
         Ok(Self {
             database,
@@ -316,16 +276,102 @@ impl Loader {
     }
 }
 
-pub fn dump(database_path: &Path, output_path: &Path) -> anyhow::Result<()> {
-    let mut dumper = Dumper::open(database_path, output_path)?;
-    dumper.dump()?;
+pub fn dump(
+    database_path: &Path,
+    output_path: &Path,
+    compression: Option<i32>,
+) -> anyhow::Result<()> {
+    // TODO: this needs refactoring
+    if output_path.as_os_str() != "-" {
+        if let Some(compression) = compression {
+            #[cfg(feature = "zstd")]
+            {
+                let file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(output_path)?;
+                let file = zstd::Encoder::new(file, compression)?;
+                let mut dumper = Dumper::open(database_path, file)?;
+                dumper.dump()?;
+
+                let file = dumper.into_inner();
+                let mut file = file.finish()?;
+                file.flush()?;
+                file.sync_all()?;
+            }
+            #[cfg(not(feature = "zstd"))]
+            {
+                let _ = compression;
+                return Err(anyhow::anyhow!("Compression feature not enabled"));
+            }
+        } else {
+            let file = BufWriter::new(
+                OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(output_path)?,
+            );
+
+            let mut dumper = Dumper::open(database_path, file)?;
+            dumper.dump()?;
+
+            let mut file = dumper.into_inner();
+            file.flush()?;
+            let file = file.into_inner()?;
+            file.sync_all()?;
+        }
+    } else if let Some(compression) = compression {
+        #[cfg(feature = "zstd")]
+        {
+            let file = BufWriter::new(std::io::stdout());
+            let file = zstd::Encoder::new(file, compression)?;
+            let mut dumper = Dumper::open(database_path, file)?;
+            dumper.dump()?;
+
+            let file = dumper.into_inner();
+            let mut file = file.finish()?;
+            file.flush()?;
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            let _ = compression;
+            return Err(anyhow::anyhow!("Compression feature not enabled"));
+        }
+    } else {
+        let file = BufWriter::new(std::io::stdout());
+
+        let mut dumper = Dumper::open(database_path, file)?;
+        dumper.dump()?;
+
+        let mut file = dumper.into_inner();
+        file.flush()?;
+    }
 
     Ok(())
 }
 
-pub fn load(database_path: &Path, input_path: &Path) -> anyhow::Result<()> {
-    let mut loader = Loader::open(database_path, input_path)?;
-    loader.load()?;
+pub fn load(database_path: &Path, input_path: &Path, compression: bool) -> anyhow::Result<()> {
+    let file: BufReader<Box<dyn Read>> = if input_path.as_os_str() != "-" {
+        BufReader::new(Box::new(File::open(input_path)?))
+    } else {
+        BufReader::new(Box::new(std::io::stdin()))
+    };
+
+    if compression {
+        #[cfg(feature = "zstd")]
+        {
+            let file = BufReader::new(zstd::Decoder::new(file)?);
+            let mut loader = Loader::open(database_path, file)?;
+            loader.load()?;
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            return Err(anyhow::anyhow!("Compression feature not enabled"));
+        }
+    } else {
+        let mut loader = Loader::open(database_path, file)?;
+        loader.load()?;
+    }
 
     Ok(())
 }
