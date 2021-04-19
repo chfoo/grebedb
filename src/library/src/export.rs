@@ -124,25 +124,21 @@ where
     }
 }
 
-struct ImportReader<R: BufRead> {
-    database: Database,
-    input_file: R,
+struct ImportReader<'a, R: BufRead> {
+    database: &'a mut Database,
+    input_file: &'a mut R,
     header_found: bool,
     footer_found: bool,
 }
 
-impl<R: BufRead> ImportReader<R> {
-    fn new(input_file: R, database: Database) -> Self {
+impl<'a, R: BufRead> ImportReader<'a, R> {
+    fn new(input_file: &'a mut R, database: &'a mut Database) -> Self {
         Self {
             database,
             input_file,
             header_found: false,
             footer_found: false,
         }
-    }
-
-    fn into_inner(self) -> (R, Database) {
-        (self.input_file, self.database)
     }
 
     fn import<C>(&mut self, mut progress: C) -> Result<(), Error>
@@ -260,23 +256,19 @@ impl<R: BufRead> ImportReader<R> {
     }
 }
 
-struct ExportWriter<W: Write> {
-    database: Option<Database>,
+struct ExportWriter<'a, W: Write> {
+    database: Option<&'a mut Database>,
     counter: u64,
-    output_file: W,
+    output_file: &'a mut W,
 }
 
-impl<W: Write> ExportWriter<W> {
-    fn new(output_file: W, database: Database) -> Self {
+impl<'a, W: Write> ExportWriter<'a, W> {
+    fn new(output_file: &'a mut W, database: &'a mut Database) -> Self {
         Self {
             database: Some(database),
             counter: 0,
             output_file,
         }
-    }
-
-    fn into_inner(self) -> (W, Database) {
-        (self.output_file, self.database.unwrap())
     }
 
     fn export<C>(&mut self, mut progress: C) -> Result<(), Error>
@@ -323,7 +315,7 @@ impl<W: Write> ExportWriter<W> {
     }
 
     fn write_key_values(&mut self, progress: &mut dyn FnMut(u64)) -> Result<(), Error> {
-        let mut database = self.database.take().unwrap();
+        let database = self.database.take().unwrap();
         let mut cursor = database.cursor()?;
 
         loop {
@@ -357,7 +349,7 @@ impl<W: Write> ExportWriter<W> {
 ///
 /// It is the caller's responsibility to call [`Database::flush()`] after
 /// the function completes.
-pub fn import<R, C>(database: Database, input_file: R, progress: C) -> Result<(Database, R), Error>
+pub fn import<R, C>(database: &mut Database, input_file: &mut R, progress: C) -> Result<(), Error>
 where
     C: FnMut(u64),
     R: BufRead,
@@ -365,9 +357,7 @@ where
     let mut reader = ImportReader::new(input_file, database);
     reader.import(progress)?;
 
-    let (input_file, database) = reader.into_inner();
-
-    Ok((database, input_file))
+    Ok(())
 }
 
 /// Export key-value pairs from the database to the destination file.
@@ -377,7 +367,7 @@ where
 ///
 /// It is the caller's responsibility to ensure data has been persisted using
 /// functions such as `flush()` or `sync_data()`.
-pub fn export<W, C>(database: Database, output_file: W, progress: C) -> Result<(Database, W), Error>
+pub fn export<W, C>(database: &mut Database, output_file: &mut W, progress: C) -> Result<(), Error>
 where
     W: Write,
     C: FnMut(u64),
@@ -385,7 +375,5 @@ where
     let mut writer = ExportWriter::new(output_file, database);
     writer.export(progress)?;
 
-    let (output_file, database) = writer.into_inner();
-
-    Ok((database, output_file))
+    Ok(())
 }
