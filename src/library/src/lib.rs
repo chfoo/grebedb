@@ -25,6 +25,7 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod export;
 mod format;
 mod lru;
 mod page;

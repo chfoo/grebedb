@@ -11,6 +11,7 @@
 ### API
 
 * Added `CompressionLevel::VeryLow`.
+* Added the `export` module, from the command line tool, to allow programmatic backups.
 
 ## 0.2.0 (2021-04-07)
 
