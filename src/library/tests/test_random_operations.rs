@@ -143,7 +143,7 @@ fn rand_operation(mut database: Database, rounds: usize) -> Result<(), Error> {
     let mut std_map = BTreeMap::<Vec<u8>, Vec<u8>>::new();
     let mut value_buffer = Vec::new();
 
-    for _num in 0..rounds {
+    for num in 0..rounds {
         match generator.get() {
             Operation::Get(key) => {
                 let has_key = database.get_buf(&key, &mut value_buffer)?;
@@ -169,6 +169,10 @@ fn rand_operation(mut database: Database, rounds: usize) -> Result<(), Error> {
                 std_map.remove(&key);
             }
             Operation::Flush => database.flush()?,
+        }
+
+        if num % 1000 == 0 {
+            database.verify(|_, _| {})?;
         }
     }
 

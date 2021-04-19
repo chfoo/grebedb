@@ -90,7 +90,6 @@ impl InternalNode {
         self.keys.is_empty()
     }
 
-    #[cfg(test)]
     pub fn keys(&self) -> &[Vec<u8>] {
         &self.keys
     }
@@ -111,6 +110,19 @@ impl InternalNode {
         } else {
             None
         }
+    }
+
+    pub fn verify_with_parent_keys(
+        &self,
+        parent_left_key: Option<&[u8]>,
+        parent_right_key: Option<&[u8]>,
+    ) -> Option<&'static str> {
+        let result = verify_node_within_parent_keys(&self.keys, parent_left_key, parent_right_key);
+        if result.is_some() {
+            return result;
+        }
+
+        self.verify()
     }
 
     fn search(&self, key: &[u8]) -> Result<usize, usize> {
@@ -267,6 +279,19 @@ impl LeafNode {
         } else {
             None
         }
+    }
+
+    pub fn verify_with_parent_keys(
+        &self,
+        parent_left_key: Option<&[u8]>,
+        parent_right_key: Option<&[u8]>,
+    ) -> Option<&'static str> {
+        let result = verify_node_within_parent_keys(&self.keys, parent_left_key, parent_right_key);
+        if result.is_some() {
+            return result;
+        }
+
+        self.verify()
     }
 
     fn search(&self, key: &[u8]) -> Result<usize, usize> {
@@ -580,12 +605,12 @@ impl Tree {
         };
         let mut current = 0usize;
         let mut total = 0usize;
-        let mut page_queue = VecDeque::new();
+        let mut page_queue = VecDeque::<(u64, Option<Vec<u8>>, Option<Vec<u8>>)>::new();
 
-        page_queue.push_back(page_id);
+        page_queue.push_back((page_id, None, None));
         total += 1;
 
-        while let Some(page_id) = page_queue.pop_front() {
+        while let Some((page_id, left_key, right_key)) = page_queue.pop_front() {
             let node = self.read_node(page_id)?;
 
             current += 1;
@@ -594,20 +619,31 @@ impl Tree {
             match node {
                 Node::EmptyRoot => {}
                 Node::Internal(internal_node) => {
-                    if let Some(message) = internal_node.verify() {
+                    if let Some(message) = internal_node
+                        .verify_with_parent_keys(left_key.as_deref(), right_key.as_deref())
+                    {
                         return Err(Error::InvalidPageData {
                             page: page_id,
                             message,
                         });
                     }
 
-                    for page_id in internal_node.children() {
-                        page_queue.push_back(*page_id);
+                    for (index, page_id) in internal_node.children().iter().enumerate() {
+                        let left_key = if index > 0 {
+                            internal_node.keys().get(index - 1).cloned()
+                        } else {
+                            None
+                        };
+                        let right_key = internal_node.keys().get(index).cloned();
+
+                        page_queue.push_back((*page_id, left_key, right_key));
                         total += 1;
                     }
                 }
                 Node::Leaf(leaf_node) => {
-                    if let Some(message) = leaf_node.verify() {
+                    if let Some(message) =
+                        leaf_node.verify_with_parent_keys(left_key.as_deref(), right_key.as_deref())
+                    {
                         return Err(Error::InvalidPageData {
                             page: page_id,
                             message,
@@ -624,20 +660,20 @@ impl Tree {
         let page_id = self.page_table.root_id().unwrap();
         let mut page_queue = VecDeque::new();
 
-        page_queue.push_back(page_id);
+        page_queue.push_back((page_id, 0));
 
         eprintln!("Root page: {}", page_id);
 
-        while let Some(page_id) = page_queue.pop_front() {
+        while let Some((page_id, height)) = page_queue.pop_front() {
             let node = self.read_node(page_id)?;
 
-            eprintln!("Page {}: {:?}", page_id, &node);
+            eprintln!("Page {}: {} {:?}", page_id, height, &node);
 
             match node {
                 Node::EmptyRoot => {}
                 Node::Internal(internal_node) => {
                     for page_id in internal_node.children() {
-                        page_queue.push_back(*page_id);
+                        page_queue.push_back((*page_id, height + 1));
                     }
                 }
                 Node::Leaf(_) => {}
@@ -983,6 +1019,31 @@ where
     data.windows(2).all(|w| w[0] <= w[1])
 }
 
+#[allow(clippy::clippy::nonminimal_bool)]
+fn verify_node_within_parent_keys(
+    node_keys: &[Vec<u8>],
+    parent_left_key: Option<&[u8]>,
+    parent_right_key: Option<&[u8]>,
+) -> Option<&'static str> {
+    if let Some(parent_left_key) = parent_left_key {
+        if let Some(first_key) = node_keys.first() {
+            if !(parent_left_key <= first_key) {
+                return Some("parent left key - first key violation");
+            }
+        }
+    }
+
+    if let Some(parent_right_key) = parent_right_key {
+        if let Some(last_key) = node_keys.last() {
+            if !(last_key.as_slice() < parent_right_key) {
+                return Some("parent right key - last key violation");
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1111,5 +1172,77 @@ mod tests {
 
         assert!(node.keys_is_empty());
         assert_eq!(node.children().len(), 1);
+    }
+
+    #[test]
+    fn test_verify_internal_node() {
+        let node = InternalNode::new(vec![b"key100".to_vec(), b"key200".to_vec()], vec![4, 8, 3]);
+
+        assert_eq!(
+            node.verify_with_parent_keys(Some(b"key100"), Some(b"key201")),
+            None
+        );
+    }
+
+    #[test]
+    fn test_verify_internal_node_bad_key_sort() {
+        let mut node = InternalNode::new(vec![b"key100".to_vec(), b"key200".to_vec()], vec![4, 8, 3]);
+        node.keys.reverse();
+
+        assert!(node.verify_with_parent_keys(None, None).is_some());
+    }
+
+    #[test]
+    fn test_verify_internal_node_bad_parent() {
+        let node = InternalNode::new(vec![b"key100".to_vec(), b"key200".to_vec()], vec![4, 8, 3]);
+
+        assert!(node
+            .verify_with_parent_keys(Some(b"key100"), Some(b"key150"))
+            .is_some());
+
+        assert!(node
+            .verify_with_parent_keys(Some(b"key150"), Some(b"key201"))
+            .is_some());
+    }
+
+    #[test]
+    fn test_verify_leaf_node() {
+        let node = LeafNode::new(
+            vec![b"key100".to_vec(), b"key200".to_vec()],
+            vec![b"v1".to_vec(), b"v2".to_vec()],
+        );
+
+        assert_eq!(
+            node.verify_with_parent_keys(Some(b"key100"), Some(b"key201")),
+            None
+        );
+    }
+
+    #[test]
+    fn test_verify_leaf_node_bad_key_sort() {
+        let mut node = LeafNode::new(
+            vec![b"key100".to_vec(), b"key200".to_vec()],
+            vec![b"v1".to_vec(), b"v2".to_vec()],
+        );
+        node.keys.reverse();
+        node.values.reverse();
+
+        assert!(node.verify_with_parent_keys(None, None).is_some());
+    }
+
+    #[test]
+    fn test_verify_leaf_node_bad_parent() {
+        let node = LeafNode::new(
+            vec![b"key100".to_vec(), b"key200".to_vec()],
+            vec![b"v1".to_vec(), b"v2".to_vec()],
+        );
+
+        assert!(node
+            .verify_with_parent_keys(Some(b"key100"), Some(b"key150"))
+            .is_some());
+
+        assert!(node
+            .verify_with_parent_keys(Some(b"key150"), Some(b"key201"))
+            .is_some());
     }
 }
