@@ -509,7 +509,7 @@ where
         self.counter_tracker.increment_revision();
 
         self.save_all_modified_pages()?;
-        self.sync_pending_page_files()?;
+        self.sync_and_rename_pending_page_files()?;
         self.file_tracker.pending_sync.clear();
         self.save_metadata()?;
         self.commit_counters();
@@ -805,21 +805,31 @@ where
         Ok(())
     }
 
-    fn sync_pending_page_files(&mut self) -> Result<(), Error> {
+    fn sync_and_rename_pending_page_files(&mut self) -> Result<(), Error> {
         let page_ids: Vec<PageId> = self.file_tracker.pending_sync.iter().cloned().collect();
 
-        for page_id in page_ids {
-            self.sync_pending_page_file(page_id)?;
+        for page_id in &page_ids {
+            self.sync_pending_page_file(*page_id)?;
+        }
+        for page_id in &page_ids {
+            self.rename_pending_page_file(*page_id)?;
         }
 
         Ok(())
     }
 
     fn sync_pending_page_file(&mut self, page_id: PageId) -> Result<(), Error> {
-        let path_1 = make_path(page_id, RevisionFlag::New);
         let path_2 = make_path(page_id, RevisionFlag::NewUnsync);
 
         self.vfs.sync_file(&path_2, self.options.file_sync)?;
+
+        Ok(())
+    }
+
+    fn rename_pending_page_file(&mut self, page_id: PageId) -> Result<(), Error> {
+        let path_1 = make_path(page_id, RevisionFlag::New);
+        let path_2 = make_path(page_id, RevisionFlag::NewUnsync);
+
         self.vfs.rename_file(&path_2, &path_1)?;
         self.file_tracker.pending_promotion.insert(page_id);
 

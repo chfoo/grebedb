@@ -149,7 +149,7 @@ fn parse_zstd_compression_args(args: &ArgMatches) -> Option<i32> {
             3 => Some(9),
             4 => Some(15),
             5 => Some(19),
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
     } else {
         None

@@ -195,7 +195,7 @@ fn execute_command(database: &mut Database, line: &str) -> anyhow::Result<Comman
                 Ok(CommandResult::Continue)
             }
             ("exit", _) => Ok(CommandResult::Exit),
-            _ => unimplemented!(),
+            _ => unreachable!(),
         },
         Err(error) => Ok(CommandResult::Error(anyhow::Error::new(error))),
     }
