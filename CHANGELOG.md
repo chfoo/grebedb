@@ -2,7 +2,7 @@
 
 (This log only contains changes for the library. Changes for the grebedb-tool crate are located in its own file.)
 
-## Unreleased
+## 0.3.0 (2021-04-20)
 
 ### General
 

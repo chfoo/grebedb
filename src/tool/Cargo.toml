@@ -1,6 +1,6 @@
 [package]
 name = "grebedb-tool"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Christopher Foo <chris.foo@gmail.com>"]
 edition = "2018"
 description = "Command line tool for operating on GrebeDB databases"
@@ -16,7 +16,7 @@ file_locking = ["grebedb/file_locking"]
 system = ["grebedb/system"]
 
 [dependencies.grebedb]
-version = "0.2"
+version = "0.3"
 path = "../library"
 default-features = false
 

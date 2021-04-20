@@ -55,13 +55,22 @@ pub struct Options {
     /// Option when opening a database. Default: LoadOrCreate.
     pub open_mode: OpenMode,
 
-    /// Maximum number of keys per node. Default: 1024.
+    /// Maximum number of keys-value pairs per node. Default: 1024.
     ///
-    /// This value specifies the threshold when node is split into two and
-    /// the tree is rebalanced.
+    /// This value specifies the threshold when a tree node is considered full.
+    /// When a node is full, it is split into two and the tree is rebalanced.
+    ///
+    /// A page contains a single node and a page is stored on disk as one file.
+    ///
+    /// This option shouldn't be changed without making performance and resource usage
+    /// benchmarks.
     pub keys_per_node: usize,
 
-    /// Number of pages held in memory cache. Default: 64.
+    /// Maximum number of pages held in memory cache. Default: 64.
+    ///
+    /// The cache is used to store frequently accessed pages for reducing disk operations.
+    ///
+    /// If memory usage is too high, consider decreasing this value first.
     pub page_cache_size: usize,
 
     /// Whether to use file locking to prevent corruption by multiple processes.
