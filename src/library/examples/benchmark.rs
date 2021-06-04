@@ -6,7 +6,7 @@ use clap::{App, Arg};
 use grebedb::{CompressionLevel, Database, Error, Options, SyncOption};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use statrs::statistics::Median;
+use statrs::statistics::{Data, Median};
 
 fn main() -> Result<(), Error> {
     let args = App::new("GrebeDB benchmark")
@@ -165,18 +165,21 @@ impl Stats {
     fn insert_median(&mut self) -> f64 {
         self.insert.sort_unstable();
         let times: Vec<f64> = self.insert.iter().map(|item| item.as_secs_f64()).collect();
+        let times = Data::new(times);
         times.median()
     }
 
     fn read_median(&mut self) -> f64 {
         self.read.sort_unstable();
         let times: Vec<f64> = self.read.iter().map(|item| item.as_secs_f64()).collect();
+        let times = Data::new(times);
         times.median()
     }
 
     fn flush_median(&mut self) -> f64 {
         self.flush.sort_unstable();
         let times: Vec<f64> = self.flush.iter().map(|item| item.as_secs_f64()).collect();
+        let times = Data::new(times);
         times.median()
     }
 }
