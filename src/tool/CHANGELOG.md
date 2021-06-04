@@ -2,9 +2,10 @@
 
 (This log only contains changes for grebedb-tool. Changes for the library are located in its own file.)
 
-## Unreleased
+## 1.0.0 (2021-06-04)
 
 * Inspect command's interactive session now supports Unix shell quoting and escapes.
+* Updated dependency to grebedb 1.0
 
 ## 0.3.0 (2021-04-20)
 

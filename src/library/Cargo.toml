@@ -1,6 +1,6 @@
 [package]
 name = "grebedb"
-version = "0.3.0"
+version = "1.0.0"
 authors = ["Christopher Foo <chris.foo@gmail.com>"]
 edition = "2018"
 description = "Lightweight embedded key-value store/database backed by files in a virtual file system interface"
