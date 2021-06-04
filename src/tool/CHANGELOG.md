@@ -2,6 +2,10 @@
 
 (This log only contains changes for grebedb-tool. Changes for the library are located in its own file.)
 
+## Unreleased
+
+* Inspect command's interactive session now supports Unix shell quoting and escapes.
+
 ## 0.3.0 (2021-04-20)
 
 * Added `--zstd` flag to `import` and `export` commands.

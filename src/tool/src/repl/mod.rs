@@ -164,7 +164,7 @@ enum CommandResult {
 fn execute_command(database: &mut Database, line: &str) -> anyhow::Result<CommandResult> {
     let args = build_command_args();
 
-    match args.get_matches_from_safe(line.split_ascii_whitespace()) {
+    match args.get_matches_from_safe(shell_words::split(line)?) {
         Ok(matches) => match matches.subcommand() {
             ("count", _) => {
                 count_command(database);
