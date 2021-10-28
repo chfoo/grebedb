@@ -22,14 +22,14 @@ default-features = false
 
 [dependencies]
 anyhow = "1.0"
-bson = "1.2"
+bson = "2.0"
 clap = "2.33"
 crc32c = "0.6"
 data-encoding = "2.3"
 percent-encoding = "2.1"
-rmpv = "0.4"
-rustyline = "8.0"
+rmpv = "1.0"
+rustyline = "9.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shell-words = "1.0"
-zstd = { version = "0.8", optional = true }
+zstd = { version = "0.9", optional = true }

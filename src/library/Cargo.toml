@@ -26,13 +26,13 @@ serde_json = "1.0"
 thiserror = "1.0"
 uuid = { version = "0.8", features = ["serde"] }
 vfs = "0.5"
-zstd = { version = "0.8", optional = true }
+zstd = { version = "0.9", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-fslock = { version = "0.1", optional = true }
+fslock = { version = "0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-fslock = { version = "0.1", optional = true }
+fslock = { version = "0.2", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0"
@@ -41,6 +41,6 @@ indexmap = "1.6"
 paste = "1.0"
 rand = "0.8"
 rand_xorshift = "0.3"
-statrs = "0.14"
+statrs = "0.15"
 strkey = "0.1"
 tempfile = "3.2"

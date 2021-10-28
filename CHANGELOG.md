@@ -2,6 +2,10 @@
 
 (This log only contains changes for the library. Changes for the grebedb-tool crate are located in its own file.)
 
+## Unreleased
+
+* Updated dependencies.
+
 ## 1.0.0 (2021-06-04)
 
 * Updated dependencies.
