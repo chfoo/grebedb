@@ -91,9 +91,8 @@ fn cursor_removed_items(mut database: Database) -> Result<(), Error> {
     }
 
     let cursor = database.cursor()?;
-    let values: Vec<(Vec<u8>, Vec<u8>)> = cursor.collect();
 
-    assert_eq!(values.len(), 0);
+    assert_eq!(cursor.count(), 0);
 
     Ok(())
 }

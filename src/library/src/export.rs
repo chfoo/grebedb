@@ -110,7 +110,7 @@ fn vec_to_hex<S>(vec: &[u8], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    serializer.serialize_str(&data_encoding::HEXUPPER.encode(&vec))
+    serializer.serialize_str(&data_encoding::HEXUPPER.encode(vec))
 }
 
 fn hex_to_vec<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>

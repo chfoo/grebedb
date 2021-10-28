@@ -527,7 +527,7 @@ where
     fn load_and_restore_metadata(&mut self) -> Result<(), Error> {
         let metadata: Metadata<M> = self
             .format
-            .read_file(self.vfs.as_mut(), &METADATA_FILENAME)?;
+            .read_file(self.vfs.as_mut(), METADATA_FILENAME)?;
 
         self.uuid = metadata.uuid;
 

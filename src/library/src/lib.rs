@@ -215,7 +215,7 @@ impl Default for CompressionLevel {
 }
 
 impl CompressionLevel {
-    fn to_zstd(&self) -> Option<i32> {
+    fn to_zstd(self) -> Option<i32> {
         match self {
             Self::None => None,
             Self::VeryLow => Some(1),

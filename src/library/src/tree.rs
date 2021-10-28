@@ -193,12 +193,11 @@ impl InternalNode {
             // If the child is the last, then remove the last key instead of
             // the non-existent lessor key
             self.keys.remove(key_index - 1);
-            self.children.remove(child_index);
         } else {
             // Remove the key that is greater
             self.keys.remove(key_index);
-            self.children.remove(child_index);
         }
+        self.children.remove(child_index);
 
         (left_page_id, right_page_id)
     }
@@ -487,7 +486,7 @@ impl Tree {
     pub fn remove(&mut self, key: &[u8]) -> Result<(), Error> {
         let mut node_path = Vec::new();
 
-        let page_id = match self.find_leaf_node(&key, Some(&mut node_path))? {
+        let page_id = match self.find_leaf_node(key, Some(&mut node_path))? {
             Some(page_id) => page_id,
             None => return Ok(()),
         };
@@ -555,9 +554,9 @@ impl Tree {
             cursor.key_index += 1;
 
             key_buffer.resize(key.len(), 0);
-            key_buffer.copy_from_slice(&key);
+            key_buffer.copy_from_slice(key);
             value_buffer.resize(value.len(), 0);
-            value_buffer.copy_from_slice(&value);
+            value_buffer.copy_from_slice(value);
 
             Ok(true)
         } else {
@@ -1019,7 +1018,7 @@ where
     data.windows(2).all(|w| w[0] <= w[1])
 }
 
-#[allow(clippy::clippy::nonminimal_bool)]
+#[allow(clippy::nonminimal_bool)]
 fn verify_node_within_parent_keys(
     node_keys: &[Vec<u8>],
     parent_left_key: Option<&[u8]>,
