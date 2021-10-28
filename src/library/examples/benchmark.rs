@@ -272,7 +272,7 @@ fn insert_random(
 fn mix(mut value: u64) -> u64 {
     value ^= 0xc001cafe;
     value <<= 2;
-    value *= 0xc001cafe;
-    value += 1;
+    value = value.wrapping_mul(0xc001cafe);
+    value = value.wrapping_add(1);
     value
 }
